@@ -1,0 +1,47 @@
+name: Firefox extension validation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  validate-and-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Mozilla web-ext
+        run: npm install --global web-ext@10.6.0
+
+      - name: Show web-ext version
+        run: web-ext --version
+
+      - name: Lint extension
+        run: web-ext lint --source-dir . --boring
+
+      - name: Build extension package
+        run: >-
+          web-ext build
+          --source-dir .
+          --artifacts-dir ./web-ext-artifacts
+          --overwrite-dest
+          --filename "goowi-{version}.zip"
+          --ignore-files README.md CHANGELOG.md AMO_COMPLIANCE.md AMO_REVIEW_NOTES.md icons/icon-master.png
+
+      - name: Upload built package
+        uses: actions/upload-artifact@v4
+        with:
+          name: goowi-firefox-build
+          path: web-ext-artifacts/*.zip
+          if-no-files-found: error
