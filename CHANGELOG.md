@@ -1,3 +1,12 @@
+## v0.7.2 — Mozilla/AMO compliance preparation
+
+- Raised the minimum supported Firefox version to 140 so GooWi can use Firefox's built-in data collection and transmission consent experience.
+- Declared required `searchTerms` transmission in `browser_specific_settings.gecko.data_collection_permissions`.
+- Added the public GitHub repository as `homepage_url`.
+- Updated the Wikimedia API user-agent to derive the extension version dynamically and identify the public source repository.
+- Updated `PRIVACY.md` and README privacy disclosures to match the manifest and actual behavior.
+- No product features changed.
+
 ## v0.7.1 — GitHub attribution link
 
 - Changed the in-panel **via GooWi** link to the public source repository:

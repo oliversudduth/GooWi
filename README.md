@@ -45,7 +45,11 @@ See [`PRIVACY.md`](PRIVACY.md) for the complete policy.
 
 ## Permissions
 
-GooWi currently runs only on supported Google Search result pages and requests host access to Wikipedia domains so it can retrieve article content.
+GooWi requires Firefox 140 or later. It runs only on supported Google Search result pages and requests host access to Wikipedia domains so it can retrieve article content. Firefox discloses and obtains consent for the required transmission of search terms to Wikipedia during installation.
+
+## Mozilla data disclosure
+
+GooWi declares `searchTerms` as required transmitted data under Firefox's built-in data collection consent system. The current Google query is sent directly to Wikipedia solely to retrieve the encyclopedia content that is GooWi's primary function. GooWi does not operate a server that receives these queries.
 
 ## Temporary installation for testing
 
@@ -61,7 +65,7 @@ Temporary extensions loaded this way are removed when Firefox restarts.
 
 ## Project status
 
-The current release-preparation build is **v0.7.0**. The last frozen beta baseline is **v0.6.9**.
+The current release-preparation build is **v0.7.2**. The last frozen beta baseline is **v0.6.9**.
 
 Before public v1.0 release, the project will complete Mozilla/AMO privacy and packaging review, final icon/branding review, regression testing, and public repository setup.
 

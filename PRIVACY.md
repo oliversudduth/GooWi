@@ -2,66 +2,74 @@
 
 **Effective date:** August 29, 2026
 
-GooWi is a Firefox extension created and maintained by Oliver Sudduth. GooWi is designed to place relevant Wikipedia content beside Google Search results while keeping Wikipedia as the destination for full articles.
+GooWi is a Firefox extension created and maintained by Oliver Sudduth. GooWi places relevant Wikipedia context beside Google Search results while preserving Wikipedia as the destination for full articles.
 
 ## Short version
 
-GooWi does **not** use analytics, advertising, telemetry, user accounts, or a developer-operated data collection service. The developer does not receive or store your Google search history through GooWi.
+GooWi does **not** use analytics, advertising, telemetry, user accounts, persistent identifiers, or a developer-operated backend service. The developer does not receive or store users' Google search history through GooWi.
 
-To provide its core feature, GooWi sends the current Google search query directly to the relevant Wikipedia language edition so that Wikipedia can return matching article information. Random Article and Wikirace likewise make requests directly to Wikipedia.
+To provide its primary feature, GooWi transmits the current Google search term directly to the relevant Wikipedia language edition so Wikipedia can return matching encyclopedia content. This transmission is required for GooWi's core functionality and is declared to Firefox as the required data type **search terms** (`searchTerms`).
+
+GooWi supports Firefox 140 and later and uses Firefox's built-in data collection and transmission consent experience. A user who does not accept the required search-term transmission can cancel installation.
 
 ## Information GooWi reads locally
 
 When GooWi runs on a supported Google Search results page, it reads:
 
-- the search query from the page URL (`q` parameter);
+- the current search query from the page URL (`q` parameter);
 - the requested/interface language when available (`hl`, the page language, or the browser language);
-- Wikipedia article titles that you choose while using Wikirace.
+- Wikipedia article titles selected while using Wikirace.
 
-This information is used in memory to provide GooWi's features. GooWi does not use Firefox's `storage` API to retain a history of searches, articles, or Wikirace activity.
+This information is used in memory to provide GooWi's features. GooWi does not use Firefox's `storage` API to retain a history of searches, viewed articles, or Wikirace activity.
 
-## Information sent to Wikipedia
+## Information transmitted to Wikipedia
 
-Depending on the feature being used, GooWi may send the following directly to a Wikipedia domain:
+Depending on the feature being used, GooWi may send requests directly to a Wikipedia domain containing:
 
-- the current Google search query, to search for a relevant Wikipedia article;
-- the query again when requesting Wikipedia's spelling suggestion after an initial match fails;
-- article titles, when retrieving an article selected during Wikirace;
-- requests for random article titles for Random Article and Wikirace;
+- the current Google search term, to find a relevant Wikipedia article;
+- the same search term when requesting Wikipedia's spelling suggestion after an initial match fails;
+- an article title when retrieving a user-selected article during Wikirace;
+- requests for a random article title for Random Article and Wikirace;
 - requests for rendered article HTML and Wikipedia's designated page image.
 
-These requests are necessary for GooWi to retrieve Wikipedia content. Like ordinary web requests, they may also expose normal network information such as your IP address and request headers to Wikimedia's servers. Wikimedia's handling of information is governed by Wikimedia's own privacy policies.
+These requests are necessary to retrieve Wikipedia content. Like ordinary HTTPS requests, they may expose normal network information such as an IP address and request headers to Wikimedia's servers. Wikimedia handles information under its own privacy policies.
 
-GooWi sends an identifying API user-agent string so Wikimedia can recognize requests as coming from the GooWi Firefox extension.
+GooWi sends an identifying API user-agent string so Wikimedia can recognize API traffic as originating from the GooWi Firefox extension.
 
 ## Google
 
-GooWi operates on Google Search results pages but does not send your query to a separate GooWi server. Google already receives the query as part of your use of Google Search.
+GooWi operates on Google Search results pages but does not send the user's query to a GooWi server. Google already receives the query through the user's use of Google Search.
 
-Outside Wikirace, selecting an internal Wikipedia concept in the GooWi preview opens a Google search for that concept. This navigation is user-initiated and is handled by Google in the same way as another Google search.
+Outside Wikirace, selecting an internal Wikipedia concept in the GooWi preview initiates a Google search for that concept. This navigation is user-initiated and is handled by Google like any other Google search.
 
 ## Developer access and retention
 
-The developer does not operate a backend service for GooWi and does not receive, sell, rent, profile, or retain GooWi users' search queries or browsing activity through the extension.
+The developer does not operate a backend service for GooWi and does not receive, sell, rent, profile, or retain GooWi users' search terms or browsing activity through the extension.
 
-GooWi does not include third-party analytics or advertising SDKs.
+GooWi includes no third-party analytics or advertising SDKs.
 
 ## Permissions
 
-GooWi requests access only where needed for its current functionality:
+GooWi requests only the access needed for its current functionality:
 
-- supported Google Search result pages, so it can display the GooWi interface and read the current query;
-- Wikipedia domains, so it can search for and retrieve Wikipedia content.
+- supported Google Search result pages, so the extension can display its interface and read the current query;
+- Wikipedia domains, so the extension can search for and retrieve Wikipedia content.
+
+Firefox also discloses that GooWi requires transmission of **search terms** because the current Google query must be sent to Wikipedia to provide the extension's primary companion-article feature.
 
 ## External links
 
-GooWi includes links to Wikipedia and to the developer's website. Visiting an external site is subject to that site's own privacy practices.
+GooWi includes links to Wikipedia and to the public GooWi source repository on GitHub. Following an external link is subject to that site's own privacy practices.
 
 ## Changes to this policy
 
-If GooWi's data practices materially change, this policy will be updated before or alongside the release that introduces the change.
+If GooWi's data practices materially change, this policy will be updated before or alongside the release that introduces the change, and the extension's Firefox data-collection declaration will be updated when required.
 
 ## Developer
 
 **Oliver Sudduth**  
 https://oliversudduth.com/
+
+## Source code
+
+https://github.com/oliversudduth/GooWi

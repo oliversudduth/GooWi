@@ -1,4 +1,5 @@
-const API_USER_AGENT = "GooWi/0.7.0 (Firefox extension; https://oliversudduth.com/)";
+const EXTENSION_VERSION = browser.runtime.getManifest().version;
+const API_USER_AGENT = `GooWi/${EXTENSION_VERSION} (Firefox extension; https://github.com/oliversudduth/GooWi)`;
 
 function normalizeLanguage(language) {
   const candidate = String(language || "en").toLowerCase().split("-")[0];
