@@ -1,0 +1,47 @@
+{
+  "manifest_version": 3,
+  "name": "GooWi",
+  "version": "0.7.1",
+  "description": "Brings relevant Wikipedia articles beside Google search results, with reading mode, random discovery, and a ten-click Wikirace challenge with optional overtime.",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "64": "icons/icon-64.png",
+    "96": "icons/icon-96.png",
+    "128": "icons/icon-128.png"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "goowi@oliversudduth.com",
+      "strict_min_version": "128.0"
+    }
+  },
+  "host_permissions": [
+    "https://*.wikipedia.org/*"
+  ],
+  "background": {
+    "scripts": [
+      "background.js"
+    ]
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.google.com/search*",
+        "https://google.com/search*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "googlepedia.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "developer": {
+    "name": "Oliver Sudduth",
+    "url": "https://oliversudduth.com/"
+  }
+}

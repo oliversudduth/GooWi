@@ -1,0 +1,441 @@
+#googlepedia-reborn-panel,
+#googlepedia-reborn-panel * {
+  box-sizing: border-box;
+}
+
+#googlepedia-reborn-panel {
+  --gp-bg: #fff;
+  --gp-fg: #202124;
+  --gp-muted: #5f6368;
+  --gp-line: #dadce0;
+  --gp-link: #1a0dab;
+
+  position: fixed;
+  z-index: 2147483000;
+  top: 104px;
+  right: 18px;
+  bottom: 18px;
+  width: clamp(330px, 36vw, 560px);
+  min-width: 330px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--gp-bg);
+  color: var(--gp-fg);
+  border: 1px solid var(--gp-line);
+  border-radius: 14px;
+  box-shadow: 0 6px 28px rgba(60, 64, 67, 0.18);
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.gp-toolbar {
+  flex: 0 0 auto;
+  min-height: 45px;
+  padding: 8px 10px 8px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--gp-line);
+  background: #f8f9fa;
+}
+
+.gp-brand-group {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.gp-brand {
+  color: inherit;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-decoration: none;
+}
+
+.gp-brand:hover {
+  text-decoration: underline;
+}
+
+.gp-brand-via {
+  color: var(--gp-muted);
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+}
+
+.gp-brand-via:hover {
+  text-decoration: underline;
+}
+
+.gp-controls {
+  display: flex;
+  gap: 4px;
+}
+
+.gp-icon-button {
+  width: 31px;
+  height: 31px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--gp-muted);
+  font-size: 22px;
+  line-height: 31px;
+  cursor: pointer;
+}
+
+.gp-icon-button:hover {
+  background: #e8eaed;
+  color: var(--gp-fg);
+}
+
+.gp-icon-button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.gp-random-button {
+  font-size: 20px;
+}
+
+.gp-body {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 24px 28px;
+}
+
+.gp-loading,
+.gp-empty {
+  color: var(--gp-muted);
+  padding: 8px 0;
+}
+
+.gp-error-detail {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.gp-article-header {
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--gp-line);
+}
+
+.gp-title {
+  color: #202122 !important;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 28px;
+  line-height: 1.15;
+  font-weight: 400;
+  text-decoration: none !important;
+}
+
+.gp-title:hover {
+  text-decoration: underline !important;
+}
+
+.gp-description {
+  margin-top: 6px;
+  color: var(--gp-muted);
+  font-size: 13px;
+}
+
+.gp-article-image {
+  float: right;
+  width: min(42%, 220px);
+  max-height: 260px;
+  object-fit: contain;
+  margin: 2px 0 12px 18px;
+  border-radius: 4px;
+}
+
+.gp-paragraph {
+  margin: 0 0 1em;
+  color: var(--gp-fg);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 15px;
+  line-height: 1.62;
+}
+
+.gp-paragraph a,
+.gp-list a,
+.gp-footer a {
+  color: var(--gp-link) !important;
+  text-decoration: none !important;
+}
+
+.gp-paragraph a:hover,
+.gp-list a:hover,
+.gp-footer a:hover {
+  text-decoration: underline !important;
+}
+
+.gp-list {
+  margin: 0.25em 0 1.05em 1.25em;
+  padding-left: 1.15em;
+  color: var(--gp-fg);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.gp-list .gp-list {
+  margin-top: 0.35em;
+  margin-bottom: 0.35em;
+}
+
+.gp-list-item {
+  margin: 0.28em 0;
+  padding-left: 0.1em;
+}
+
+.gp-section-heading {
+  clear: both;
+  margin: 1.25em 0 0.55em;
+  padding-bottom: 0.25em;
+  border-bottom: 1px solid var(--gp-line);
+  color: #202122;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 20px;
+  font-weight: 400;
+}
+
+
+.gp-subsection-heading {
+  margin-top: 0.9em;
+  font-size: 17px;
+  border-bottom: 0;
+  font-weight: 600;
+}
+
+.gp-footer {
+  clear: both;
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 1px solid var(--gp-line);
+  font-size: 13px;
+}
+
+@media (prefers-color-scheme: dark) {
+  #googlepedia-reborn-panel {
+    --gp-bg: #202124;
+    --gp-fg: #e8eaed;
+    --gp-muted: #bdc1c6;
+    --gp-line: #3c4043;
+    --gp-link: #8ab4f8;
+    box-shadow: 0 6px 28px rgba(0, 0, 0, 0.35);
+  }
+
+  .gp-toolbar {
+    background: #292a2d;
+  }
+
+  .gp-title,
+  .gp-section-heading {
+    color: var(--gp-fg) !important;
+  }
+
+  .gp-icon-button:hover {
+    background: #3c4043;
+  }
+}
+
+@media (max-width: 1050px) {
+  #googlepedia-reborn-panel {
+    position: relative;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    width: auto;
+    min-width: 0;
+    max-height: 70vh;
+    margin: 12px 16px 20px;
+  }
+}
+
+#googlepedia-reborn-panel.gp-collapsed {
+  width: 48px;
+  min-width: 48px;
+  height: 48px;
+  bottom: auto;
+}
+
+#googlepedia-reborn-panel.gp-collapsed .gp-brand-group,
+#googlepedia-reborn-panel.gp-collapsed .gp-body,
+#googlepedia-reborn-panel.gp-collapsed .gp-icon-button:not(:last-child) {
+  display: none;
+}
+
+#googlepedia-reborn-panel.gp-collapsed .gp-toolbar {
+  min-height: 46px;
+  padding: 7px;
+  justify-content: center;
+  border-bottom: 0;
+}
+
+/* Full-page reading overlay. Google stays loaded underneath and returns at the
+   same scroll position when the user restores the side panel. */
+html.googlepedia-reborn-overlay-open {
+  overflow: hidden !important;
+}
+
+#googlepedia-reborn-panel.gp-expanded {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  bottom: 12px;
+  left: 12px;
+  width: auto;
+  min-width: 0;
+  height: auto;
+  border-radius: 14px;
+  box-shadow: 0 10px 44px rgba(0, 0, 0, 0.32);
+}
+
+#googlepedia-reborn-panel.gp-expanded .gp-toolbar {
+  padding-left: 20px;
+  padding-right: 16px;
+}
+
+#googlepedia-reborn-panel.gp-expanded .gp-body {
+  padding: 30px 48px 44px;
+}
+
+#googlepedia-reborn-panel.gp-expanded .gp-article-header,
+#googlepedia-reborn-panel.gp-expanded .gp-article,
+#googlepedia-reborn-panel.gp-expanded .gp-footer {
+  width: min(100%, 1100px);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+#googlepedia-reborn-panel.gp-expanded .gp-title {
+  font-size: 34px;
+}
+
+#googlepedia-reborn-panel.gp-expanded .gp-paragraph,
+#googlepedia-reborn-panel.gp-expanded .gp-list {
+  font-size: 17px;
+  line-height: 1.72;
+}
+
+#googlepedia-reborn-panel.gp-expanded .gp-section-heading {
+  font-size: 24px;
+}
+
+#googlepedia-reborn-panel.gp-expanded .gp-article-image {
+  width: min(34%, 320px);
+  max-height: 420px;
+  margin-left: 26px;
+}
+
+@media (max-width: 760px) {
+  #googlepedia-reborn-panel.gp-expanded {
+    top: 6px;
+    right: 6px;
+    bottom: 6px;
+    left: 6px;
+  }
+
+  #googlepedia-reborn-panel.gp-expanded .gp-body {
+    padding: 22px 20px 32px;
+  }
+
+  #googlepedia-reborn-panel.gp-expanded .gp-title {
+    font-size: 29px;
+  }
+}
+
+/* Wikirace: a ten-click, in-pane race with optional unlimited overtime. */
+.gp-race-button {
+  font-size: 19px;
+}
+
+.gp-racebar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 42px;
+  padding: 8px 12px 8px 16px;
+  border-bottom: 1px solid var(--gp-line);
+  background: var(--gp-bg);
+  color: var(--gp-muted);
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12px;
+}
+
+.gp-racebar[hidden] {
+  display: none !important;
+}
+
+.gp-race-label {
+  flex: 0 0 auto;
+  color: var(--gp-fg);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+}
+
+.gp-race-message {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gp-race-action {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border: 1px solid var(--gp-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--gp-fg);
+  font: inherit;
+  cursor: pointer;
+}
+
+.gp-race-action:hover {
+  background: #e8eaed;
+}
+
+.gp-race-hint {
+  color: var(--gp-muted);
+}
+
+.gp-race-loading .gp-article a {
+  pointer-events: none;
+  opacity: 0.72;
+}
+
+.gp-title:not(a) {
+  cursor: default;
+}
+
+.gp-title:not(a):hover {
+  text-decoration: none !important;
+}
+
+#googlepedia-reborn-panel.gp-collapsed .gp-racebar {
+  display: none !important;
+}
+
+@media (prefers-color-scheme: dark) {
+  .gp-race-action:hover {
+    background: #3c4043;
+  }
+}
+
+#googlepedia-reborn-panel.gp-expanded .gp-subsection-heading {
+  font-size: 20px;
+}
