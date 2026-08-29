@@ -134,14 +134,38 @@
           target.appendChild(a);
           destination = a;
         }
-      } else {
+      } else if (title) {
+        // Normal GooWi navigation stays inside the Wikipedia pane. The underlying
+        // Google query must remain untouched; the return-to-query control restores
+        // the article associated with that Google search at any time.
         const a = document.createElement("a");
-        a.href = title ? googleSearchUrl(title) : googleSearchUrl(label);
-        a.target = "_self";
-        a.rel = "noopener noreferrer";
-        a.title = `Search Google for ${title || label}`;
+        a.href = "#";
+        a.title = `Open ${title} in GooWi`;
+        a.dataset.wikiTitle = title;
+        a.addEventListener("click", (event) => {
+          event.preventDefault();
+          options.onWikiNavigate?.(title);
+        });
         target.appendChild(a);
         destination = a;
+      } else {
+        // External/non-article links must never replace the current Google page.
+        // Preserve safe HTTP(S) destinations by opening them in a new tab.
+        try {
+          const rawHref = element.getAttribute("href") || "";
+          const externalUrl = new URL(rawHref, `https://${options.language || "en"}.wikipedia.org/`);
+          if (["http:", "https:"].includes(externalUrl.protocol)) {
+            const a = document.createElement("a");
+            a.href = externalUrl.href;
+            a.target = "_blank";
+            a.rel = "noopener noreferrer";
+            a.title = `Open ${label} in a new tab`;
+            target.appendChild(a);
+            destination = a;
+          }
+        } catch {
+          // Leave unsupported destinations as plain text.
+        }
       }
     } else if (["b", "strong", "i", "em", "small", "sub", "sup", "abbr"].includes(tag)) {
       const inline = document.createElement(tag);
@@ -202,6 +226,35 @@
       element: list.childElementCount ? list : null,
       itemCount
     };
+  }
+
+  function buildHatnotes(html, language, options = {}) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
+    const root = doc.querySelector(".mw-parser-output") || doc.body;
+    if (!root) return null;
+
+    const container = makeElement("div", "gp-hatnotes");
+    let count = 0;
+
+    for (const sourceNote of root.querySelectorAll(".hatnote")) {
+      if (count >= 4) break;
+      if (sourceNote.parentElement?.closest(".hatnote")) continue;
+      if (isInsideArticleChrome(sourceNote)) continue;
+
+      const note = makeElement("div", "gp-hatnote");
+      for (const child of sourceNote.childNodes) {
+        appendSanitizedNode(note, child, { ...options, language });
+      }
+
+      const text = (note.textContent || "").replace(/\s+/g, " ").trim();
+      if (!text) continue;
+
+      container.appendChild(note);
+      count += 1;
+    }
+
+    return container.childElementCount ? container : null;
   }
 
   function buildReadableArticle(html, language, options = {}) {
@@ -472,6 +525,42 @@
     }
   }
 
+  async function navigateNormalArticle(title) {
+    const panel = document.getElementById(PANEL_ID);
+    const body = panel?.querySelector(".gp-body");
+    if (!panel?.isConnected || !body || raceIsEngaged()) return;
+
+    if (normalizeRaceTitle(title) === normalizeRaceTitle(currentResult?.title)) {
+      return;
+    }
+
+    const serial = ++requestSerial;
+    const query = getQuery();
+
+    try {
+      const result = await browser.runtime.sendMessage({
+        type: "googlepedia:page",
+        title,
+        language: currentResult?.language || getLanguage()
+      });
+
+      // Navigation inside GooWi belongs to the Google query that was visible when
+      // the link was clicked. A later Google search must always win the race.
+      if (serial !== requestSerial || query !== getQuery() || !panel.isConnected) {
+        return;
+      }
+
+      if (!result?.found) return;
+
+      currentResult = result;
+      renderResult(body, currentResult, query);
+      updateRaceUi(panel);
+      body.scrollTop = 0;
+    } catch {
+      // Keep the current article in place if pane navigation fails.
+    }
+  }
+
   async function navigateWikirace(title) {
     const panel = document.getElementById(PANEL_ID);
     const body = panel?.querySelector(".gp-body");
@@ -690,6 +779,19 @@
 
     body.appendChild(header);
 
+    const navigationOptions = {
+      raceActive,
+      language: result.language,
+      onWikiNavigate: raceActive ? navigateWikirace : navigateNormalArticle
+    };
+
+    // Preserve Wikipedia's own clarification/ambiguity hatnotes (for example,
+    // "This article is about the fruit. For the technology company, see Apple
+    // Inc."). They let Wikipedia explain alternate meanings without GooWi
+    // second-guessing Wikipedia's primary-topic choice.
+    const hatnotes = buildHatnotes(result.html, result.language, navigationOptions);
+    if (hatnotes) body.appendChild(hatnotes);
+
     const article = makeElement("article", "gp-article");
 
     // Use Wikipedia's designated representative image only. If Wikipedia does
@@ -704,9 +806,8 @@
     }
 
     const readable = buildReadableArticle(result.html, result.language, {
-      raceActive,
-      isDisambiguation: isLikelyDisambiguation(result),
-      onWikiNavigate: navigateWikirace
+      ...navigationOptions,
+      isDisambiguation: isLikelyDisambiguation(result)
     });
 
     if (readable.childNodes.length) {

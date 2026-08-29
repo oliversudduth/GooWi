@@ -149,6 +149,28 @@
   font-size: 13px;
 }
 
+.gp-hatnotes {
+  margin: -4px 0 16px;
+}
+
+.gp-hatnote {
+  margin: 0.4em 0;
+  color: var(--gp-fg);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 14px;
+  font-style: italic;
+  line-height: 1.5;
+}
+
+.gp-hatnote a {
+  color: var(--gp-link) !important;
+  text-decoration: none !important;
+}
+
+.gp-hatnote a:hover {
+  text-decoration: underline !important;
+}
+
 .gp-article-image {
   float: right;
   width: min(42%, 220px);
@@ -249,16 +271,79 @@
   }
 }
 
-@media (max-width: 1050px) {
+/* Compact desktop mode for roughly half-screen browser windows.
+   GooWi stays fixed on the right down to 900px wide, then deliberately
+   disappears rather than crowding genuinely narrow layouts. */
+@media (min-width: 900px) and (max-width: 1050px) {
   #googlepedia-reborn-panel {
-    position: relative;
-    top: auto;
-    right: auto;
-    bottom: auto;
-    width: auto;
-    min-width: 0;
-    max-height: 70vh;
-    margin: 12px 16px 20px;
+    position: fixed;
+    top: 88px;
+    right: 8px;
+    bottom: 8px;
+    width: clamp(270px, 29vw, 290px);
+    min-width: 270px;
+    max-height: none;
+    margin: 0;
+    border-radius: 12px;
+    font-size: 13px;
+  }
+
+  .gp-toolbar {
+    min-height: 41px;
+    padding: 6px 6px 6px 9px;
+  }
+
+  .gp-brand-group {
+    gap: 4px;
+  }
+
+  .gp-brand {
+    font-size: 13px;
+  }
+
+  .gp-brand-via {
+    font-size: 8px;
+  }
+
+  .gp-controls {
+    gap: 1px;
+  }
+
+  .gp-icon-button {
+    width: 27px;
+    height: 27px;
+    font-size: 18px;
+    line-height: 27px;
+  }
+
+  .gp-body {
+    padding: 16px 14px 22px;
+  }
+
+  .gp-title {
+    font-size: 24px;
+  }
+
+  .gp-paragraph,
+  .gp-list {
+    font-size: 14px;
+  }
+
+  .gp-article-image {
+    width: min(38%, 120px);
+    max-height: 170px;
+    margin-left: 12px;
+  }
+
+  .gp-racebar {
+    padding-left: 10px;
+    gap: 6px;
+  }
+}
+
+@media (max-width: 899px) {
+  #googlepedia-reborn-panel {
+    display: none !important;
   }
 }
 
@@ -320,6 +405,10 @@ html.googlepedia-reborn-overlay-open {
 
 #googlepedia-reborn-panel.gp-expanded .gp-title {
   font-size: 34px;
+}
+
+#googlepedia-reborn-panel.gp-expanded .gp-hatnote {
+  font-size: 16px;
 }
 
 #googlepedia-reborn-panel.gp-expanded .gp-paragraph,

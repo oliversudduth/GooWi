@@ -26,6 +26,17 @@ const STOP_WORDS = new Set([
   "in", "is", "it", "of", "on", "or", "the", "to", "was", "were", "with"
 ]);
 
+// Query terms that usually express a user's intent to perform an action or
+// reach an official/service page rather than learn about a broad entity.
+// If one of these terms is absent from the candidate article title, it must
+// not be "rescued" merely because the word appears incidentally in a snippet.
+const INTENT_TERMS = new Set([
+  "support", "help", "contact", "login", "signin", "account",
+  "order", "orders", "tracking", "track", "download", "downloads",
+  "buy", "purchase", "price", "pricing", "repair", "repairs",
+  "store", "shop", "shopping", "phone", "hours"
+]);
+
 function stripHtml(value) {
   return String(value || "")
     .replace(/<[^>]*>/g, " ")
@@ -39,6 +50,10 @@ function normalizeText(value) {
   return stripHtml(value)
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
+    // Treat dotted initialisms as the compact form users normally type:
+    // "D.C." -> "DC", "U.S." -> "US". This keeps titles such as
+    // "Washington, D.C." aligned with queries such as "washington dc".
+    .replace(/\b(?:[A-Za-z]\.){2,}/g, (match) => match.replace(/\./g, ""))
     .replace(/&/g, " and ")
     .replace(/[’']/g, "")
     .toLowerCase()
@@ -103,26 +118,31 @@ function relevanceFor(query, page) {
     return { accepted: false, score: 0, reason: "empty" };
   }
 
-  // Strongest signal: the query and article title are the same phrase, or one
-  // is a direct expansion of the other (for example "Camus" -> "Albert Camus").
+  const queryTokens = meaningfulTokens(query);
+
+  // Strongest signal: the query and article title are the same phrase.
+  // Single-word queries may also expand safely to a longer title (for example
+  // "Camus" -> "Albert Camus"). Multi-word queries are deliberately stricter:
+  // "Washington DC" must not be treated as an exact concept match for the
+  // unrelated longer title "Washington DC Open".
   for (const candidateTitle of titleCandidates) {
     if (candidateTitle === queryNorm) {
       return { accepted: true, score: 1, reason: "exact-title" };
     }
 
-    // A longer article title that contains the complete query is normally a
-    // safe expansion ("Camus" -> "Albert Camus"). The reverse is NOT
-    // automatically safe: a specific query such as "Mississippi River and
-    // Tributaries Project" contains the broader title "Mississippi River",
-    // but those are different concepts. Longer queries are judged below using
-    // token coverage and supporting metadata instead.
-    if (queryNorm.length >= 4 && candidateTitle.length >= 4 &&
-        candidateTitle.includes(queryNorm)) {
-      return { accepted: true, score: 0.98, reason: "title-expands-query" };
+    if (queryTokens.length === 1 && queryNorm.length >= 4 &&
+        candidateTitle.length >= 4 && candidateTitle.includes(queryNorm)) {
+      return { accepted: true, score: 0.98, reason: "single-title-expansion" };
     }
   }
 
-  const queryTokens = meaningfulTokens(query);
+  const titleTokenGroups = [page?.title || "", page?.matched_title || ""]
+    .filter(Boolean)
+    .map((title) => meaningfulTokens(title))
+    .filter((tokens) => tokens.length);
+  const shortestTitleTokenCount = titleTokenGroups.length
+    ? Math.min(...titleTokenGroups.map((tokens) => tokens.length))
+    : 0;
   const titleTokens = meaningfulTokens(`${page?.title || ""} ${page?.matched_title || ""}`);
   const supportText = `${page?.title || ""} ${page?.matched_title || ""} ${page?.description || ""} ${page?.excerpt || ""}`;
   const supportTokens = meaningfulTokens(supportText);
@@ -130,6 +150,21 @@ function relevanceFor(query, page) {
   const titleCoverage = coverage(queryTokens, titleTokens);
   const supportCoverage = coverage(queryTokens, supportTokens);
   const fuzzyTitle = Math.max(...titleCandidates.map((title) => diceCoefficient(queryNorm, title)), 0);
+
+  // Transactional/navigational searches such as "apple support" should not
+  // resolve to a broad product/entity article just because the article body
+  // happens to contain the word "support". Exact/direct title matches above
+  // remain valid, as do titles that explicitly contain the intent term.
+  const missingIntentTerms = queryTokens.filter(
+    (token) => INTENT_TERMS.has(token) && !titleTokens.includes(token)
+  );
+  if (missingIntentTerms.length && titleCoverage < 1) {
+    return {
+      accepted: false,
+      score: 0,
+      reason: "intent-term-missing-from-title"
+    };
+  }
 
   // A single-term query can legitimately expand to a longer title ("NFIP" ->
   // "National Flood Insurance Program"), but the term must actually occur in
@@ -148,17 +183,25 @@ function relevanceFor(query, page) {
     };
   }
 
-  // Two-word searches are common names. Normally both words should be present;
-  // a very close fuzzy title is allowed to rescue a typo.
+  // Two-word searches are common names and place names. Require a tight title:
+  // both query terms may match an equally short title, while fuzzy matching can
+  // still rescue a typo such as "Albet Camus" -> "Albert Camus". A longer
+  // title that merely contains both terms ("Washington DC Open") is not enough.
   if (queryTokens.length === 2) {
-    const accepted = titleCoverage === 1 ||
+    const tightTitle = shortestTitleTokenCount > 0 &&
+      shortestTitleTokenCount <= queryTokens.length;
+    const accepted = tightTitle && (
+      titleCoverage === 1 ||
       (titleCoverage >= 0.5 && fuzzyTitle >= 0.82) ||
-      (supportCoverage === 1 && titleCoverage >= 0.5);
+      (supportCoverage === 1 && titleCoverage >= 0.5)
+    );
 
     return {
       accepted,
-      score: Math.max(titleCoverage, fuzzyTitle * 0.9, supportCoverage * 0.75),
-      reason: accepted ? "two-term-match" : "two-term-too-distant"
+      score: accepted
+        ? Math.max(titleCoverage, fuzzyTitle * 0.9, supportCoverage * 0.75)
+        : 0,
+      reason: accepted ? "two-term-tight-match" : "two-term-too-distant"
     };
   }
 
