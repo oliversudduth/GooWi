@@ -40,7 +40,7 @@ GooWi sends an identifying API user-agent string so Wikimedia can recognize API 
 
 GooWi operates on Google Search results pages but does not send the user's query to a GooWi server. Google already receives the query through the user's use of Google Search.
 
-Outside Wikirace, selecting an internal Wikipedia concept in the GooWi preview initiates a Google search for that concept. This navigation is user-initiated and is handled by Google like any other Google search.
+Navigating among Wikipedia article links inside GooWi does not change or resubmit the underlying Google search.
 
 ## Developer access and retention
 
