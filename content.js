@@ -491,7 +491,7 @@
     const startTitle = currentResult.title;
 
     try {
-      const target = await browser.runtime.sendMessage({
+      const target = await chrome.runtime.sendMessage({
         type: "googlepedia:wikirace-target",
         language: currentResult.language || getLanguage(),
         excludeTitle: startTitle
@@ -538,7 +538,7 @@
     const query = getQuery();
 
     try {
-      const result = await browser.runtime.sendMessage({
+      const result = await chrome.runtime.sendMessage({
         type: "googlepedia:page",
         title,
         language: currentResult?.language || getLanguage()
@@ -578,7 +578,7 @@
     const query = getQuery();
 
     try {
-      const result = await browser.runtime.sendMessage({
+      const result = await chrome.runtime.sendMessage({
         type: "googlepedia:page",
         title,
         language: currentResult?.language || getLanguage()
@@ -853,7 +853,7 @@
     button.setAttribute("aria-busy", "true");
 
     try {
-      const result = await browser.runtime.sendMessage({
+      const result = await chrome.runtime.sendMessage({
         type: "googlepedia:random",
         language: getLanguage()
       });
@@ -909,7 +909,7 @@
     const serial = ++requestSerial;
 
     try {
-      const result = await browser.runtime.sendMessage({
+      const result = await chrome.runtime.sendMessage({
         type: "googlepedia:lookup",
         query,
         language: getLanguage()

@@ -1,4 +1,4 @@
-const EXTENSION_VERSION = browser.runtime.getManifest().version;
+const EXTENSION_VERSION = chrome.runtime.getManifest().version;
 const API_USER_AGENT = `GooWi/${EXTENSION_VERSION} (Firefox extension; https://github.com/oliversudduth/GooWi)`;
 
 function normalizeLanguage(language) {
@@ -407,46 +407,36 @@ async function randomWikipedia(language) {
   return wikipediaPageByTitle(target.title, target.language, "random-article");
 }
 
-browser.runtime.onMessage.addListener((message) => {
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  let task;
+
   if (message?.type === "googlepedia:lookup") {
     const query = String(message.query || "").trim().slice(0, 500);
-    if (!query) {
-      return Promise.resolve({ found: false });
-    }
-
-    return searchWikipedia(query, message.language)
-      .catch((error) => ({
-        found: false,
-        error: error instanceof Error ? error.message : String(error)
-      }));
-  }
-
-  if (message?.type === "googlepedia:random") {
-    return randomWikipedia(message.language)
-      .catch((error) => ({
-        found: false,
-        error: error instanceof Error ? error.message : String(error)
-      }));
-  }
-
-  if (message?.type === "googlepedia:wikirace-target") {
-    return randomWikipediaTitle(message.language, message.excludeTitle)
-      .catch((error) => ({
-        found: false,
-        error: error instanceof Error ? error.message : String(error)
-      }));
-  }
-
-  if (message?.type === "googlepedia:page") {
+    task = query
+      ? searchWikipedia(query, message.language)
+      : Promise.resolve({ found: false });
+  } else if (message?.type === "googlepedia:random") {
+    task = randomWikipedia(message.language);
+  } else if (message?.type === "googlepedia:wikirace-target") {
+    task = randomWikipediaTitle(message.language, message.excludeTitle);
+  } else if (message?.type === "googlepedia:page") {
     const title = String(message.title || "").trim().slice(0, 500);
-    if (!title) return Promise.resolve({ found: false });
-
-    return wikipediaPageByTitle(title, message.language, "wikirace-link")
-      .catch((error) => ({
-        found: false,
-        error: error instanceof Error ? error.message : String(error)
-      }));
+    task = title
+      ? wikipediaPageByTitle(title, message.language, "wikirace-link")
+      : Promise.resolve({ found: false });
+  } else {
+    return false;
   }
 
-  return undefined;
+  Promise.resolve(task)
+    .then((result) => sendResponse(result))
+    .catch((error) => {
+      sendResponse({
+        found: false,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    });
+
+  // Keep Chrome's message channel open for the asynchronous response.
+  return true;
 });
