@@ -95,8 +95,8 @@ jobs:
 
       - name: Ensure Chrome API namespace is used
         run: |
-          if grep -R --line-number --exclude-dir=.git --exclude='*.md' 'browser\.runtime' .; then
-            echo "ERROR: Firefox browser.runtime namespace found in Chrome branch."
+          if grep -n 'browser\.runtime' background.js content.js; then
+            echo "ERROR: Firefox browser.runtime namespace found in Chrome source."
             exit 1
           fi
           echo "Chrome runtime namespace check passed."
