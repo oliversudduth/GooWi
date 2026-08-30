@@ -1,0 +1,120 @@
+name: Chrome extension validation
+
+on:
+  push:
+    branches: [chrome-port]
+  pull_request:
+    branches: [chrome-port]
+  workflow_dispatch:
+
+jobs:
+  validate-and-build:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check JavaScript syntax
+        run: |
+          node --check background.js
+          node --check content.js
+
+      - name: Validate Chrome Manifest V3
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+
+          const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
+
+          const fail = (message) => {
+            console.error(`ERROR: ${message}`);
+            process.exitCode = 1;
+          };
+
+          if (manifest.manifest_version !== 3) {
+            fail('manifest_version must be 3');
+          }
+
+          if (!manifest.background || manifest.background.service_worker !== 'background.js') {
+            fail('background.service_worker must be background.js');
+          }
+
+          if (manifest.background && manifest.background.scripts) {
+            fail('background.scripts is Firefox-style and must not be present in the Chrome build');
+          }
+
+          if (manifest.browser_specific_settings) {
+            fail('browser_specific_settings is Firefox-specific and must not be present in the Chrome build');
+          }
+
+          if (!Array.isArray(manifest.host_permissions) ||
+              !manifest.host_permissions.includes('https://*.wikipedia.org/*')) {
+            fail('Wikipedia host permission is missing');
+          }
+
+          const contentScripts = manifest.content_scripts || [];
+          if (!contentScripts.length) {
+            fail('content_scripts is missing');
+          } else {
+            const matches = contentScripts.flatMap(cs => cs.matches || []);
+            if (!matches.includes('https://www.google.com/search*')) {
+              fail('www.google.com search match is missing');
+            }
+            if (!matches.includes('https://google.com/search*')) {
+              fail('google.com search match is missing');
+            }
+          }
+
+          const requiredIcons = ['16', '32', '48', '64', '96', '128'];
+          for (const size of requiredIcons) {
+            const icon = manifest.icons && manifest.icons[size];
+            if (!icon) {
+              fail(`manifest icon ${size} is missing`);
+            } else if (!fs.existsSync(icon)) {
+              fail(`manifest icon file does not exist: ${icon}`);
+            }
+          }
+
+          if (!manifest.version) {
+            fail('version is missing');
+          }
+
+          if (!process.exitCode) {
+            console.log(`Chrome manifest validation passed for GooWi v${manifest.version}`);
+          }
+          NODE
+
+      - name: Ensure Chrome API namespace is used
+        run: |
+          if grep -R --line-number --exclude-dir=.git --exclude='*.md' 'browser\.runtime' .; then
+            echo "ERROR: Firefox browser.runtime namespace found in Chrome branch."
+            exit 1
+          fi
+          echo "Chrome runtime namespace check passed."
+
+      - name: Read extension version
+        id: version
+        run: |
+          VERSION=$(node -p "require('./manifest.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build Chrome package
+        run: |
+          mkdir -p chrome-artifacts
+          zip -r "chrome-artifacts/goowi-chrome-${{ steps.version.outputs.version }}.zip"             manifest.json             background.js             content.js             googlepedia.css             icons             LICENSE             NOTICE             PRIVACY.md
+
+      - name: Upload Chrome package
+        uses: actions/upload-artifact@v4
+        with:
+          name: goowi-chrome-build
+          path: chrome-artifacts/*.zip
+          if-no-files-found: error
