@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "GooWi",
-  "version": "0.7.8",
-  "description": "Brings relevant Wikipedia articles beside Google search results, with reading mode, random discovery, and a ten-click Wikirace challenge with optional overtime.",
+  "version": "0.7.11",
+  "description": "Adds relevant Wikipedia context beside Google Search, with reading mode, Random Article, and a ten-click Wikirace challenge.",
   "minimum_chrome_version": "99",
   "icons": {
     "16": "icons/icon-16.png",
