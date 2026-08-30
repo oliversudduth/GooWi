@@ -40,7 +40,7 @@ GooWi sends an identifying API user-agent string so Wikimedia can recognize API 
 
 GooWi operates on Google Search results pages but does not send the user's query to a GooWi server. Google already receives the query through the user's use of Google Search.
 
-Navigating among Wikipedia article links inside GooWi does not change or resubmit the underlying Google search.
+Navigating among Wikipedia article links inside GooWi does not change or resubmit the underlying Google search. This navigation is user-initiated and is handled by Google like any other Google search.
 
 ## Developer access and retention
 
@@ -73,3 +73,7 @@ https://oliversudduth.com/
 ## Source code
 
 https://github.com/oliversudduth/GooWi
+
+## Support
+
+goowi.extension@gmail.com
