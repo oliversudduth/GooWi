@@ -1,18 +1,14 @@
-from pathlib import Path
-
-workflow = """name: Chrome extension validation
+name: Firefox extension validation
 
 on:
   push:
-    branches: [chrome-port]
+    branches: [main]
   pull_request:
-    branches: [chrome-port]
   workflow_dispatch:
 
 jobs:
   validate-and-build:
     runs-on: ubuntu-latest
-
     permissions:
       contents: read
 
@@ -20,116 +16,32 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
+      - name: Set up Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: '22'
 
-      - name: Check JavaScript syntax
-        run: |
-          node --check background.js
-          node --check content.js
+      - name: Install Mozilla web-ext
+        run: npm install --global web-ext@10.6.0
 
-      - name: Validate Chrome Manifest V3
-        run: |
-          node <<'NODE'
-          const fs = require('fs');
+      - name: Show web-ext version
+        run: web-ext --version
 
-          const manifest = JSON.parse(fs.readFileSync('manifest.json', 'utf8'));
+      - name: Lint extension
+        run: web-ext lint --source-dir . --boring
 
-          const fail = (message) => {
-            console.error(`ERROR: ${message}`);
-            process.exitCode = 1;
-          };
+      - name: Build extension package
+        run: >-
+          web-ext build
+          --source-dir .
+          --artifacts-dir ./web-ext-artifacts
+          --overwrite-dest
+          --filename "goowi-{version}.zip"
+          --ignore-files README.md CHANGELOG.md AMO_COMPLIANCE.md AMO_REVIEW_NOTES.md icons/icon-master.png
 
-          if (manifest.manifest_version !== 3) {
-            fail('manifest_version must be 3');
-          }
-
-          if (!manifest.background || manifest.background.service_worker !== 'background.js') {
-            fail('background.service_worker must be background.js');
-          }
-
-          if (manifest.background && manifest.background.scripts) {
-            fail('background.scripts is Firefox-style and must not be present in the Chrome build');
-          }
-
-          if (manifest.browser_specific_settings) {
-            fail('browser_specific_settings is Firefox-specific and must not be present in the Chrome build');
-          }
-
-          if (!Array.isArray(manifest.host_permissions) ||
-              !manifest.host_permissions.includes('https://*.wikipedia.org/*')) {
-            fail('Wikipedia host permission is missing');
-          }
-
-          const contentScripts = manifest.content_scripts || [];
-          if (!contentScripts.length) {
-            fail('content_scripts is missing');
-          } else {
-            const matches = contentScripts.flatMap(cs => cs.matches || []);
-            if (!matches.includes('https://www.google.com/search*')) {
-              fail('www.google.com search match is missing');
-            }
-            if (!matches.includes('https://google.com/search*')) {
-              fail('google.com search match is missing');
-            }
-          }
-
-          const requiredIcons = ['16', '32', '48', '64', '96', '128'];
-          for (const size of requiredIcons) {
-            const icon = manifest.icons && manifest.icons[size];
-            if (!icon) {
-              fail(`manifest icon ${size} is missing`);
-            } else if (!fs.existsSync(icon)) {
-              fail(`manifest icon file does not exist: ${icon}`);
-            }
-          }
-
-          if (!manifest.version) {
-            fail('version is missing');
-          }
-
-          if (!process.exitCode) {
-            console.log(`Chrome manifest validation passed for GooWi v${manifest.version}`);
-          }
-          NODE
-
-      - name: Ensure Chrome API namespace is used
-        run: |
-          if grep -n 'browser\\.runtime' background.js content.js; then
-            echo "ERROR: Firefox browser.runtime namespace found in Chrome source."
-            exit 1
-          fi
-          echo "Chrome runtime namespace check passed."
-
-      - name: Read extension version
-        id: version
-        run: |
-          VERSION=$(node -p "require('./manifest.json').version")
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
-      - name: Build Chrome package
-        run: |
-          mkdir -p chrome-artifacts
-          zip -r "chrome-artifacts/goowi-chrome-${{ steps.version.outputs.version }}.zip" \
-            manifest.json \
-            background.js \
-            content.js \
-            googlepedia.css \
-            icons \
-            LICENSE \
-            NOTICE \
-            PRIVACY.md
-
-      - name: Upload Chrome package
+      - name: Upload built package
         uses: actions/upload-artifact@v4
         with:
-          name: goowi-chrome-build
-          path: chrome-artifacts/*.zip
+          name: goowi-firefox-build
+          path: web-ext-artifacts/*.zip
           if-no-files-found: error
-"""
-
-out = Path("/mnt/data/chrome-extension-fixed.yml")
-out.write_text(workflow, encoding="utf-8")
-print(out)
