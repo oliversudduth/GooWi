@@ -1,5 +1,5 @@
 const EXTENSION_VERSION = browser.runtime.getManifest().version;
-const API_USER_AGENT = `GooWi/${EXTENSION_VERSION} (Firefox extension; https://github.com/oliversudduth/GooWi)`;
+const API_USER_AGENT = `GooWi/${EXTENSION_VERSION} (browser extension; https://github.com/oliversudduth/GooWi)`;
 
 function normalizeLanguage(language) {
   const candidate = String(language || "en").toLowerCase().split("-")[0];
@@ -23,7 +23,12 @@ async function fetchJson(url) {
 
 const STOP_WORDS = new Set([
   "a", "an", "and", "are", "as", "at", "be", "by", "for", "from",
-  "in", "is", "it", "of", "on", "or", "the", "to", "was", "were", "with"
+  "in", "is", "it", "of", "on", "or", "the", "to", "was", "were", "with",
+  // Common name particles / glue words. Treating these as non-semantic keeps
+  // searches such as "Thomas de Marle" aligned with aliases such as
+  // "Thomas of Marle" without making the substantive name tokens looser.
+  "da", "de", "del", "della", "des", "di", "do", "dos", "du",
+  "la", "le", "van", "von"
 ]);
 
 // Query terms that usually express a user's intent to perform an action or
@@ -34,7 +39,8 @@ const INTENT_TERMS = new Set([
   "support", "help", "contact", "login", "signin", "account",
   "order", "orders", "tracking", "track", "download", "downloads",
   "buy", "purchase", "price", "pricing", "repair", "repairs",
-  "store", "shop", "shopping", "phone", "hours"
+  "store", "shop", "shopping", "phone", "hours",
+  "customer", "service", "services"
 ]);
 
 function stripHtml(value) {
@@ -108,6 +114,218 @@ function coverage(queryTokens, haystackTokens) {
   return matches / queryTokens.length;
 }
 
+function orderedPhraseMatch(queryTokens, value) {
+  if (!queryTokens.length) return false;
+  const tokens = normalizeText(value)
+    .split(" ")
+    .filter((token) => token && (!STOP_WORDS.has(token) || /^\d+$/.test(token)));
+
+  if (tokens.length < queryTokens.length) return false;
+
+  for (let start = 0; start <= tokens.length - queryTokens.length; start += 1) {
+    let matched = true;
+    for (let offset = 0; offset < queryTokens.length; offset += 1) {
+      if (tokens[start + offset] !== queryTokens[offset]) {
+        matched = false;
+        break;
+      }
+    }
+    if (matched) return true;
+  }
+
+  return false;
+}
+
+function titleAcronym(title) {
+  const tokens = meaningfulTokens(title);
+  return tokens.map((token) => {
+    // Preserve compact Roman numerals so "World War II" -> "wwii".
+    if (/^[ivxlcdm]+$/i.test(token)) return token;
+    return token[0] || "";
+  }).join("");
+}
+
+function damerauLevenshteinDistance(a, b) {
+  const left = normalizeText(a);
+  const right = normalizeText(b);
+  const rows = left.length + 1;
+  const cols = right.length + 1;
+  const matrix = Array.from({ length: rows }, () => Array(cols).fill(0));
+
+  for (let i = 0; i < rows; i += 1) matrix[i][0] = i;
+  for (let j = 0; j < cols; j += 1) matrix[0][j] = j;
+
+  for (let i = 1; i < rows; i += 1) {
+    for (let j = 1; j < cols; j += 1) {
+      const cost = left[i - 1] === right[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,
+        matrix[i][j - 1] + 1,
+        matrix[i - 1][j - 1] + cost
+      );
+
+      if (
+        i > 1 && j > 1 &&
+        left[i - 1] === right[j - 2] &&
+        left[i - 2] === right[j - 1]
+      ) {
+        matrix[i][j] = Math.min(matrix[i][j], matrix[i - 2][j - 2] + 1);
+      }
+    }
+  }
+
+  return matrix[left.length][right.length];
+}
+
+function plausibleSingleTermAlias(query, page) {
+  const token = meaningfulTokens(query)[0] || "";
+  if (!token) return false;
+
+  const title = String(page?.title || "");
+  const matchedTitle = String(page?.matched_title || "");
+  const titleTokens = meaningfulTokens(`${title} ${matchedTitle}`);
+
+  if (titleTokens.includes(token)) return true;
+
+  // Redirect/matched-title evidence is safe when it exactly represents the
+  // user's term, but arbitrary occurrences deep in an article snippet are not.
+  if (normalizeText(matchedTitle) === normalizeText(query)) return true;
+
+  const acronym = titleAcronym(title);
+  if (acronym && normalizeText(acronym) === normalizeText(query)) return true;
+
+  return false;
+}
+
+
+const SEMANTIC_QUALIFIERS = new Map([
+  ["animal", new Set([
+    "animal", "animals", "species", "mammal", "mammals", "cat", "cats",
+    "feline", "felines", "bird", "birds", "reptile", "reptiles", "fish",
+    "insect", "insects", "organism", "organisms", "wildlife"
+  ])],
+  ["car", new Set([
+    "car", "cars", "automobile", "automobiles", "vehicle", "vehicles",
+    "automotive", "automaker", "automakers"
+  ])],
+  ["company", new Set([
+    "company", "companies", "corporation", "corporations", "business",
+    "businesses", "firm", "firms"
+  ])]
+]);
+
+function romanNumeralTokens(value) {
+  return meaningfulTokens(value).filter((token) =>
+    /^(?:i|ii|iii|iv|v|vi|vii|viii|ix|x|xi|xii|xiii|xiv|xv|xvi|xvii|xviii|xix|xx)$/i.test(token)
+  );
+}
+
+function hasRomanNumeralConflict(query, page) {
+  const queryNumerals = romanNumeralTokens(query);
+  if (!queryNumerals.length) return false;
+
+  const titleNumerals = romanNumeralTokens(
+    `${page?.title || ""} ${page?.matched_title || ""}`
+  );
+  if (!titleNumerals.length) return false;
+
+  const querySet = new Set(queryNumerals);
+  return titleNumerals.some((token) => !querySet.has(token));
+}
+
+function orderedSubsequenceMatch(needles, haystack, maxGap = 2) {
+  if (!needles.length || !haystack.length) return null;
+
+  let searchFrom = 0;
+  let firstIndex = -1;
+  let previousIndex = -1;
+
+  for (const needle of needles) {
+    let found = -1;
+    for (let index = searchFrom; index < haystack.length; index += 1) {
+      if (haystack[index] === needle) {
+        found = index;
+        break;
+      }
+    }
+
+    if (found < 0) return null;
+    if (previousIndex >= 0 && found - previousIndex - 1 > maxGap) return null;
+
+    if (firstIndex < 0) firstIndex = found;
+    previousIndex = found;
+    searchFrom = found + 1;
+  }
+
+  return { firstIndex, lastIndex: previousIndex };
+}
+
+function genericListLikePage(page) {
+  const description = normalizeText(page?.description || "");
+  const title = normalizeText(page?.title || "");
+
+  return /\b(?:name list|given name|surname|disambiguation)\b/.test(description) ||
+    /\bdisambiguation\b/.test(title);
+}
+
+function leadIdentityAliasMatch(queryTokens, page) {
+  if (queryTokens.length < 2 || genericListLikePage(page)) return false;
+
+  const excerptTokens = normalizeText(page?.excerpt || "")
+    .split(" ")
+    .filter((token) => token && (!STOP_WORDS.has(token) || /^\d+$/.test(token)));
+
+  if (!excerptTokens.length) return false;
+
+  // Identity aliases in Wikipedia's search excerpt normally occur right at the
+  // beginning of the lead ("Samuel Langhorne Clemens ...", "Gaius Julius
+  // Caesar ..."). Relationship mentions later in another person's article
+  // should not qualify merely because every query token eventually appears.
+  const lead = excerptTokens.slice(0, Math.max(14, queryTokens.length + 6));
+  const match = orderedSubsequenceMatch(queryTokens, lead, 2);
+
+  return Boolean(
+    match &&
+    match.firstIndex <= 2 &&
+    match.lastIndex <= queryTokens.length + 5
+  );
+}
+
+function shortNameTitleMatch(queryTokens, page) {
+  if (queryTokens.length !== 2) return false;
+
+  const groups = [page?.title || "", page?.matched_title || ""]
+    .filter(Boolean)
+    .map((title) => meaningfulTokens(title))
+    .filter((tokens) => tokens.length >= 2);
+
+  return groups.some((tokens) => {
+    if (tokens[tokens.length - 1] !== queryTokens[queryTokens.length - 1]) {
+      return false;
+    }
+    return Boolean(orderedSubsequenceMatch(queryTokens, tokens, 3));
+  });
+}
+
+function semanticQualifierMatch(queryTokens, titleTokens, page) {
+  if (queryTokens.length !== 2) return false;
+
+  const titleSet = new Set(titleTokens);
+  const matched = queryTokens.filter((token) => titleSet.has(token));
+  const missing = queryTokens.filter((token) => !titleSet.has(token));
+
+  if (matched.length !== 1 || missing.length !== 1) return false;
+
+  const synonyms = SEMANTIC_QUALIFIERS.get(missing[0]);
+  if (!synonyms) return false;
+
+  const supportTokens = new Set(meaningfulTokens(
+    `${page?.description || ""} ${page?.excerpt || ""}`
+  ));
+
+  return [...synonyms].some((token) => supportTokens.has(token));
+}
+
 function relevanceFor(query, page) {
   const queryNorm = normalizeText(query);
   const titleNorm = normalizeText(page?.title || "");
@@ -134,6 +352,18 @@ function relevanceFor(query, page) {
         candidateTitle.length >= 4 && candidateTitle.includes(queryNorm)) {
       return { accepted: true, score: 0.98, reason: "single-title-expansion" };
     }
+  }
+
+  // Roman numerals are identity-bearing tokens. A query for "Alexander III"
+  // must never be allowed to drift to "Alexander IV". Alias titles that contain
+  // no numeral (for example "Alexander the Great") remain eligible through the
+  // lead-identity path below.
+  if (hasRomanNumeralConflict(query, page)) {
+    return {
+      accepted: false,
+      score: 0,
+      reason: "roman-numeral-conflict"
+    };
   }
 
   const titleTokenGroups = [page?.title || "", page?.matched_title || ""]
@@ -166,42 +396,77 @@ function relevanceFor(query, page) {
     };
   }
 
-  // A single-term query can legitimately expand to a longer title ("NFIP" ->
-  // "National Flood Insurance Program"), but the term must actually occur in
-  // Wikipedia's returned metadata/snippet. Mere character resemblance is not enough.
+  // A person's formal, birth, regnal, or pen name can differ radically from
+  // the Wikipedia article title. Accept a full query that appears as an ordered
+  // identity phrase right at the beginning of the search excerpt. Keeping this
+  // to the lead avoids treating a relative or colleague mentioned later in an
+  // article as the article's subject.
+  const leadAlias = titleCoverage < 1 &&
+    leadIdentityAliasMatch(queryTokens, page);
+  if (leadAlias) {
+    return {
+      accepted: true,
+      score: 0.94,
+      reason: "lead-identity-alias"
+    };
+  }
+
+  // Single-word searches are especially vulnerable to false positives because
+  // Wikipedia search snippets may contain the typed word incidentally. For
+  // example, a misspelling can appear deep in an unrelated article and should
+  // never make that article relevant. Require title/redirect/acronym evidence
+  // or a very strong title resemblance; otherwise allow the spelling-correction
+  // path below to try again.
   if (queryTokens.length === 1) {
-    const token = queryTokens[0];
-    const supportHasToken = new Set(supportTokens).has(token);
+    const aliasMatch = plausibleSingleTermAlias(query, page);
     const accepted = titleCoverage === 1 ||
-      (token.length >= 3 && supportHasToken) ||
+      aliasMatch ||
       fuzzyTitle >= 0.88;
 
     return {
       accepted,
-      score: Math.max(titleCoverage, supportHasToken ? 0.82 : 0, fuzzyTitle * 0.9),
+      score: Math.max(titleCoverage, aliasMatch ? 0.90 : 0, fuzzyTitle * 0.9),
       reason: accepted ? "single-term-match" : "single-term-too-distant"
     };
   }
 
-  // Two-word searches are common names and place names. Require a tight title:
-  // both query terms may match an equally short title, while fuzzy matching can
-  // still rescue a typo such as "Albet Camus" -> "Albert Camus". A longer
-  // title that merely contains both terms ("Washington DC Open") is not enough.
+  // Two-word searches are common names, places, and disambiguated concepts.
+  // Keep the ordinary tight-title rule, while adding two conservative rescue
+  // paths:
+  //   1. a short personal name whose first/last tokens are present in order in
+  //      a longer formal title and whose surname remains the title's final token;
+  //   2. a semantic qualifier such as "animal" that is supported by the
+  //      candidate's description/excerpt ("species", "mammal", "cat", etc.).
   if (queryTokens.length === 2) {
     const tightTitle = shortestTitleTokenCount > 0 &&
       shortestTitleTokenCount <= queryTokens.length;
-    const accepted = tightTitle && (
+    const shortName = titleCoverage === 1 &&
+      shortNameTitleMatch(queryTokens, page);
+    const semanticQualifier = titleCoverage >= 0.5 &&
+      semanticQualifierMatch(queryTokens, titleTokens, page);
+
+    const accepted = (tightTitle && (
       titleCoverage === 1 ||
-      (titleCoverage >= 0.5 && fuzzyTitle >= 0.82) ||
-      (supportCoverage === 1 && titleCoverage >= 0.5)
-    );
+      (titleCoverage >= 0.5 && fuzzyTitle >= 0.82)
+    )) || shortName || semanticQualifier;
 
     return {
       accepted,
       score: accepted
-        ? Math.max(titleCoverage, fuzzyTitle * 0.9, supportCoverage * 0.75)
+        ? Math.max(
+            titleCoverage,
+            fuzzyTitle * 0.9,
+            shortName ? 0.92 : 0,
+            semanticQualifier ? 0.86 : 0
+          )
         : 0,
-      reason: accepted ? "two-term-tight-match" : "two-term-too-distant"
+      reason: accepted
+        ? (shortName
+            ? "two-term-formal-title"
+            : (semanticQualifier
+                ? "two-term-semantic-qualifier"
+                : "two-term-tight-match"))
+        : "two-term-too-distant"
     };
   }
 
@@ -223,6 +488,98 @@ function relevanceFor(query, page) {
     reason: accepted ? "multi-term-match" : "multi-term-too-distant"
   };
 }
+
+
+
+function titleAcronymVariants(value) {
+  const rawTokens = normalizeText(value).split(" ").filter(Boolean);
+  const variants = new Set();
+  if (!rawTokens.length) return variants;
+
+  const initials = (tokens) => tokens.map((token) =>
+    /^[ivxlcdm]+$/i.test(token) ? token : (token[0] || "")
+  ).join("");
+
+  variants.add(initials(rawTokens));
+  if (["a", "an", "the"].includes(rawTokens[0]) && rawTokens.length > 1) {
+    variants.add(initials(rawTokens.slice(1)));
+  }
+  variants.add(titleAcronym(value));
+  return variants;
+}
+
+function validatedGoogleCanonicalContext(query, context) {
+  const title = String(context?.title || "").trim().slice(0, 160);
+  const evidence = String(context?.evidence || "").trim().slice(0, 3000);
+  const source = String(context?.source || "").trim().slice(0, 80);
+  const confidence = Number(context?.confidence || 0);
+
+  if (!title || confidence < 75) return null;
+
+  const queryTokens = meaningfulTokens(query);
+  const titleTokens = meaningfulTokens(title);
+  const evidenceTokens = meaningfulTokens(evidence);
+  if (!queryTokens.length || !titleTokens.length) return null;
+
+  // A navigational search must not be converted back into a broad encyclopedia
+  // entity. For example, Google may prominently identify Apple on a search for
+  // "apple customer service", but the words "customer service" are precisely
+  // why GooWi should stay out of the way.
+  const missingIntent = queryTokens.filter(
+    (token) => INTENT_TERMS.has(token) && !titleTokens.includes(token)
+  );
+  if (missingIntent.length) return null;
+
+  const queryNorm = normalizeText(query);
+  const titleNorm = normalizeText(title);
+  const rawCompact = queryNorm.replace(/\s+/g, "");
+  const acronymMatch = rawCompact.length >= 2 && rawCompact.length <= 12 &&
+    titleAcronymVariants(title).has(rawCompact);
+  const titleCoverage = coverage(queryTokens, titleTokens);
+  const evidenceCoverage = coverage(queryTokens, evidenceTokens);
+  const orderedEvidence = Boolean(orderedSubsequenceMatch(queryTokens, evidenceTokens, 2));
+  const fuzzy = diceCoefficient(queryNorm, titleNorm);
+  const editDistance = damerauLevenshteinDistance(queryNorm, titleNorm);
+  const maxLength = Math.max(queryNorm.length, titleNorm.length);
+  const typoLike = maxLength <= 16 && editDistance <= 2;
+
+  const related = acronymMatch ||
+    titleCoverage >= 0.75 ||
+    evidenceCoverage >= 0.75 ||
+    orderedEvidence ||
+    fuzzy >= 0.82 ||
+    typoLike;
+
+  if (!related) return null;
+
+  return { title, evidence, source, confidence };
+}
+
+function chooseSearchMatch(query, pages, canonicalContext = null, canonicalPages = []) {
+  const primaryBest = rankRelevantPages(query, pages)[0] || null;
+
+  // A literal exact Wikipedia title remains authoritative. Google context is a
+  // rescue/disambiguation signal, not permission to override an exact concept
+  // the user explicitly searched for.
+  if (primaryBest?.relevance?.reason === "exact-title") {
+    return { ...primaryBest, source: "query" };
+  }
+
+  const canonicalBest = canonicalContext
+    ? (rankRelevantPages(canonicalContext.title, canonicalPages)[0] || null)
+    : null;
+
+  if (canonicalBest && canonicalBest.relevance.score >= 0.84) {
+    const primaryScore = primaryBest?.relevance?.score || 0;
+    const canonicalScore = canonicalBest.relevance.score + 0.08;
+    if (!primaryBest || canonicalScore > primaryScore) {
+      return { ...canonicalBest, source: "google-canonical" };
+    }
+  }
+
+  return primaryBest ? { ...primaryBest, source: "query" } : null;
+}
+
 
 async function fetchSearchPages(query, language) {
   const lang = normalizeLanguage(language);
@@ -258,14 +615,21 @@ function plausibleSpellingSuggestion(originalQuery, suggestion) {
   if (!originalTokens.length || !correctedTokens.length) return false;
 
   // Wikipedia's suggestion is only a rescue path for likely spelling errors,
-  // not a license to reinterpret the user's search. Require the strings to be
-  // very similar and keep token-count changes small.
+  // not a license to reinterpret the user's search. Dice similarity handles
+  // ordinary substitutions well; Damerau-Levenshtein also catches adjacent
+  // transpositions such as "wiazrd" -> "wizard" and "Geroge" -> "George".
   const similarity = diceCoefficient(original, corrected);
+  const editDistance = damerauLevenshteinDistance(original, corrected);
+  const maxLength = Math.max(original.length, corrected.length);
+  const editSimilarity = maxLength ? 1 - (editDistance / maxLength) : 0;
   const lengthRatio = Math.min(original.length, corrected.length) /
     Math.max(original.length, corrected.length);
   const tokenDelta = Math.abs(originalTokens.length - correctedTokens.length);
+  const shortTypo = maxLength <= 12 && editDistance <= 2;
 
-  return similarity >= 0.72 && lengthRatio >= 0.72 && tokenDelta <= 1;
+  return (similarity >= 0.72 || editSimilarity >= 0.82 || shortTypo) &&
+    lengthRatio >= 0.72 &&
+    tokenDelta <= 1;
 }
 
 async function wikipediaSpellingSuggestion(query, language) {
@@ -277,16 +641,27 @@ async function wikipediaSpellingSuggestion(query, language) {
   return suggestion;
 }
 
-async function searchWikipedia(query, language) {
+async function searchWikipedia(query, language, googleContext = null) {
   const lang = normalizeLanguage(language);
-  const pages = await fetchSearchPages(query, lang);
-  const ranked = rankRelevantPages(query, pages);
-  const best = ranked[0];
+  const canonicalContext = validatedGoogleCanonicalContext(query, googleContext);
+
+  const [pages, canonicalPages] = await Promise.all([
+    fetchSearchPages(query, lang),
+    canonicalContext && normalizeText(canonicalContext.title) !== normalizeText(query)
+      ? fetchSearchPages(canonicalContext.title, lang).catch(() => [])
+      : Promise.resolve([])
+  ]);
+
+  const best = chooseSearchMatch(query, pages, canonicalContext, canonicalPages);
 
   if (best?.page?.title) {
     return buildPageResult(best.page, lang, {
       score: best.relevance.score,
-      reason: best.relevance.reason
+      reason: best.source === "google-canonical" ? "google-canonical-topic" : best.relevance.reason,
+      matchedReason: best.source === "google-canonical" ? best.relevance.reason : undefined,
+      originalQuery: best.source === "google-canonical" ? query : undefined,
+      googleCanonicalTopic: best.source === "google-canonical" ? canonicalContext.title : undefined,
+      googleContextSource: best.source === "google-canonical" ? canonicalContext.source : undefined
     });
   }
 
@@ -414,7 +789,7 @@ browser.runtime.onMessage.addListener((message) => {
       return Promise.resolve({ found: false });
     }
 
-    return searchWikipedia(query, message.language)
+    return searchWikipedia(query, message.language, message.googleContext)
       .catch((error) => ({
         found: false,
         error: error instanceof Error ? error.message : String(error)

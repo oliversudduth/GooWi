@@ -2,74 +2,63 @@
 
 **Wikipedia context beside Google Search.**
 
-GooWi is an independent, open-source Firefox WebExtension created by **Oliver Sudduth**. It places a concise, contextually relevant Wikipedia preview beside Google Search results while preserving Google as the search interface and Wikipedia as the destination for full articles.
+GooWi is an independent, open-source browser extension created by **Oliver Sudduth**. It places a concise, contextually relevant Wikipedia companion beside Google Search results while preserving Google as the search interface and Wikipedia as the destination for full articles.
 
-GooWi is currently in **pre-1.0 development**.
+GooWi follows a simple rule:
+
+> **Show a useful Wikipedia companion when there is a sufficiently relevant match; otherwise stay out of the way.**
 
 ## Why GooWi exists
 
 Search engines are often excellent at prioritizing official, transactional, local, or current sources. That can push Wikipedia's useful encyclopedic context far down the page—or off the first page entirely. GooWi restores that context without replacing the search results.
 
-The extension follows a simple rule: **show a useful Wikipedia companion when there is a sufficiently relevant match; otherwise stay out of the way.**
-
 ## Features
 
-- Relevant Wikipedia article preview beside Google Search results
+- Relevant Wikipedia previews beside Google Search results
 - Conservative relevance filtering that favors silence over misleading matches
+- Optional high-confidence Google-context-assisted matching
 - Wikipedia-assisted spelling correction for likely typos
 - Wikipedia disambiguation pages for genuinely ambiguous searches
-- Representative images selected through Wikipedia's PageImages API
-- Random Article without changing the underlying Google query
-- Expand/restore reading overlay that leaves the Google page loaded underneath
-- Wikirace mode with full supported article navigation
+- Wikipedia hatnotes and clarification links
+- Wikipedia PageImages representative-image support
+- Internal Wikipedia navigation that leaves the underlying Google query unchanged
+- Random Article
+- Expand/restore reading overlay
+- Wikirace with full supported article navigation
   - random target article
   - 10-click initial challenge
-  - Continue or New race at the 10-click checkpoint
-  - unlimited overtime if the player chooses Continue
+  - Continue or New Race at the checkpoint
+  - unlimited overtime when Continue is chosen
+- Responsive full-width and half-screen desktop layouts
 - Light/dark appearance support
-- Clickable Wikipedia and developer attribution in the GooWi toolbar
 
 ## Product philosophy
 
-GooWi is intended to be a **gateway to Wikipedia, not a replacement for it**. Normal mode deliberately presents a condensed preview. A link at the end of the preview sends the reader to the complete article on Wikipedia.
+GooWi is intended to be a **gateway to Wikipedia, not a replacement for it**.
 
-Wikirace is the exception: gameplay requires access to the full supported article so GooWi does not hide a valid navigation route.
+Normal mode deliberately presents a condensed preview. A link at the end sends the reader to the complete article on Wikipedia. Wikirace is the exception because gameplay requires access to the full supported article.
 
 ## Privacy
 
-GooWi has no analytics, ads, telemetry, accounts, or developer-operated backend service.
+GooWi has no analytics, ads, telemetry, accounts, persistent identifiers, or developer-operated backend service.
 
-To retrieve Wikipedia content, GooWi sends the current search query directly to the relevant Wikipedia language edition. Random Article and Wikirace also communicate directly with Wikipedia. The developer does not receive or retain those queries through GooWi.
+To provide its primary feature, GooWi sends the current Google search term directly to Wikipedia. When a high-confidence Google entity/topic interpretation is visible, GooWi may also use that context locally and send the inferred canonical topic directly to Wikipedia for an additional candidate lookup.
 
-See [`PRIVACY.md`](PRIVACY.md) for the complete policy.
+The developer does not receive or retain users' search terms through GooWi.
+
+See [PRIVACY.md](PRIVACY.md) for the complete policy.
 
 ## Permissions
 
-GooWi requires Firefox 140 or later. It runs only on supported Google Search result pages and requests host access to Wikipedia domains so it can retrieve article content. Firefox discloses and obtains consent for the required transmission of search terms to Wikipedia during installation.
-
-## Mozilla data disclosure
-
-GooWi declares `searchTerms` as required transmitted data under Firefox's built-in data collection consent system. The current Google query is sent directly to Wikipedia solely to retrieve the encyclopedia content that is GooWi's primary function. GooWi does not operate a server that receives these queries.
-
-## Temporary installation for testing
-
-Until GooWi is publicly distributed through Mozilla Add-ons:
-
-1. Download or clone the source.
-2. Open `about:debugging` in Firefox.
-3. Select **This Firefox**.
-4. Choose **Load Temporary Add-on…**.
-5. Select `manifest.json` from the GooWi source directory.
-
-Temporary extensions loaded this way are removed when Firefox restarts.
+GooWi runs only on supported Google Search result pages and requests Wikipedia-domain access only to retrieve encyclopedia content.
 
 ## Project status
 
-The current release candidate is v0.7.8.
+The current release candidate is **v0.7.11**.
 
-GooWi is in pre-1.0 development and is being prepared for its first public release through Mozilla Add-ons (AMO). The extension has completed its primary regression test suite, Mozilla web-ext validation, privacy/data-transmission review, and public repository setup.
+v0.7.10 was an unreleased development build whose matching improvements were incorporated into v0.7.11. v0.7.11 adds Google-context-assisted matching while retaining GooWi's conservative Wikipedia relevance filtering.
 
-The first AMO release will be published as an experimental pre-1.0 version while real-world use and feedback inform the eventual v1.0 release.
+Firefox and Chrome builds are maintained and validated independently before store release.
 
 ## Authorship and license
 
@@ -77,7 +66,7 @@ GooWi was originally conceived and developed by **Oliver Sudduth**.
 
 Copyright 2026 Oliver Sudduth.
 
-Licensed under the **Apache License, Version 2.0**. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
 ## Independence and trademarks
 
@@ -85,6 +74,29 @@ GooWi is an independent project and is not affiliated with, sponsored by, or end
 
 Google, Wikipedia, and other names or marks referenced by the project remain the property of their respective owners and are used only to identify the services with which GooWi interoperates or the content it presents.
 
+## Support
+
+Email: `goowi.extension@gmail.com`
+
+Issues: https://github.com/oliversudduth/GooWi/issues
+
 ## Source repository
 
 https://github.com/oliversudduth/GooWi
+
+## Temporary installation for testing — Firefox
+
+Until the current Firefox build is distributed through Mozilla Add-ons:
+
+1. Download or clone the `main` branch.
+2. Open `about:debugging` in Firefox.
+3. Choose **This Firefox**.
+4. Click **Load Temporary Add-on…**.
+5. Select `manifest.json` from the GooWi source directory.
+
+Temporary add-ons loaded this way are removed when Firefox restarts.
+
+## Firefox notes
+
+- Minimum supported Firefox version: **140**
+- The Firefox build declares required transmitted data types `searchTerms` and `websiteContent`.

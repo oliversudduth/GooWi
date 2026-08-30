@@ -26,6 +26,231 @@
     return document.documentElement.lang || navigator.language || "en";
   }
 
+
+
+  const GOOGLE_GENERIC_HEADINGS = new Set([
+    "ai overview", "overview", "people also ask", "people also search for",
+    "images", "videos", "shopping", "news", "maps", "forums", "web results",
+    "search results", "wikipedia", "ratings", "read now", "more results"
+  ]);
+
+  function normalizeGoogleSignalText(value) {
+    return String(value || "")
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/&/g, " and ")
+      .replace(/[’']/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function googleSignalTokens(value) {
+    const stopWords = new Set([
+      "a", "an", "and", "are", "as", "at", "be", "by", "for", "from",
+      "in", "is", "it", "of", "on", "or", "the", "to", "was", "were", "with",
+      "da", "de", "del", "della", "des", "di", "do", "dos", "du", "la", "le",
+      "van", "von"
+    ]);
+    return [...new Set(
+      normalizeGoogleSignalText(value)
+        .split(" ")
+        .filter((token) => token && (!stopWords.has(token) || /^\d+$/.test(token)))
+    )];
+  }
+
+  function googleTokenCoverage(needles, haystack) {
+    if (!needles.length) return 0;
+    const set = new Set(haystack);
+    return needles.filter((token) => set.has(token)).length / needles.length;
+  }
+
+  function googleOrderedSubsequence(needles, haystack, maxGap = 2) {
+    if (!needles.length || !haystack.length) return false;
+    let searchFrom = 0;
+    let previous = -1;
+    for (const needle of needles) {
+      let found = -1;
+      for (let index = searchFrom; index < haystack.length; index += 1) {
+        if (haystack[index] === needle) {
+          found = index;
+          break;
+        }
+      }
+      if (found < 0) return false;
+      if (previous >= 0 && found - previous - 1 > maxGap) return false;
+      previous = found;
+      searchFrom = found + 1;
+    }
+    return true;
+  }
+
+  function googleTopicAcronymVariants(value) {
+    const rawTokens = normalizeGoogleSignalText(value).split(" ").filter(Boolean);
+    const variants = new Set();
+    if (!rawTokens.length) return variants;
+
+    const initials = (tokens) => tokens.map((token) =>
+      /^[ivxlcdm]+$/i.test(token) ? token : (token[0] || "")
+    ).join("");
+
+    variants.add(initials(rawTokens));
+    if (["a", "an", "the"].includes(rawTokens[0]) && rawTokens.length > 1) {
+      variants.add(initials(rawTokens.slice(1)));
+    }
+    variants.add(initials(googleSignalTokens(value)));
+    return variants;
+  }
+
+  function isVisibleGoogleElement(element) {
+    if (!(element instanceof Element)) return false;
+    if (element.closest(`#${PANEL_ID}`)) return false;
+    const rect = element.getBoundingClientRect();
+    if (rect.width < 20 || rect.height < 12) return false;
+    const style = getComputedStyle(element);
+    return style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity || 1) > 0;
+  }
+
+  function boundedGoogleEvidence(element) {
+    let node = element;
+    let best = (element.innerText || element.textContent || "").replace(/\s+/g, " ").trim();
+
+    for (let depth = 0; depth < 5 && node?.parentElement; depth += 1) {
+      node = node.parentElement;
+      if (node.closest(`#${PANEL_ID}`)) break;
+      const text = (node.innerText || node.textContent || "").replace(/\s+/g, " ").trim();
+      if (!text) continue;
+      if (text.length > 2400) break;
+      if (text.length > best.length) best = text;
+    }
+
+    return best.slice(0, 2400);
+  }
+
+  function googleCanonicalScore(query, title, evidence, baseScore) {
+    const queryNorm = normalizeGoogleSignalText(query);
+    const titleNorm = normalizeGoogleSignalText(title);
+    if (!queryNorm || !titleNorm || queryNorm === titleNorm) return 0;
+    if (GOOGLE_GENERIC_HEADINGS.has(titleNorm)) return 0;
+    if (titleNorm.length < 2 || titleNorm.length > 140) return 0;
+
+    const queryTokens = googleSignalTokens(query);
+    const titleTokens = googleSignalTokens(title);
+    const evidenceTokens = googleSignalTokens(evidence);
+    if (!queryTokens.length || !titleTokens.length) return 0;
+
+    let score = baseScore;
+    const rawCompact = queryNorm.replace(/\s+/g, "");
+    const titleAcronyms = googleTopicAcronymVariants(title);
+    if (rawCompact.length >= 2 && rawCompact.length <= 12 && titleAcronyms.has(rawCompact)) {
+      score += 45;
+    }
+
+    const titleCoverage = googleTokenCoverage(queryTokens, titleTokens);
+    const evidenceCoverage = googleTokenCoverage(queryTokens, evidenceTokens);
+    score += titleCoverage * 30;
+    score += evidenceCoverage * 25;
+
+    if (googleOrderedSubsequence(queryTokens, evidenceTokens, 2)) score += 25;
+    if (normalizeGoogleSignalText(evidence).includes(queryNorm)) score += 10;
+    if (titleCoverage === 1) score += 10;
+
+    return score;
+  }
+
+  function extractGoogleCanonicalContext(query) {
+    if (!query || !document.body) return null;
+
+    const candidates = [];
+    const seen = new Set();
+
+    function addCandidate(element, source, baseScore) {
+      if (!isVisibleGoogleElement(element)) return;
+
+      const nestedHeading = element.matches("h1, h2, [role='heading']")
+        ? element
+        : element.querySelector("h1, h2, h3, [role='heading']");
+      const rawTitle = String(
+        element.getAttribute?.("data-entityname") ||
+        nestedHeading?.innerText || nestedHeading?.textContent ||
+        element.innerText || element.textContent || ""
+      ).replace(/\s+/g, " ").trim();
+
+      if (!rawTitle) return;
+      const title = rawTitle.split(/\n/)[0].trim().slice(0, 140);
+      const key = normalizeGoogleSignalText(title);
+      if (!key || seen.has(key) || GOOGLE_GENERIC_HEADINGS.has(key)) return;
+
+      const evidence = boundedGoogleEvidence(nestedHeading || element);
+      const score = googleCanonicalScore(query, title, evidence, baseScore);
+      if (score < 75) return;
+
+      seen.add(key);
+      candidates.push({ title, evidence, source, confidence: Math.min(100, Math.round(score)) });
+    }
+
+    // Google's entity/knowledge modules have used several stable semantic
+    // attributes and a handful of long-lived title classes. These are treated
+    // as high-confidence signals when present, but GooWi does not depend on any
+    // one of them.
+    const structuredSelectors = [
+      "[data-attrid='title']",
+      "[data-entityname]",
+      ".SPZz6b",
+      ".qrShPb",
+      ".kno-ecr-pt",
+      ".PZPZlf"
+    ];
+    for (const selector of structuredSelectors) {
+      for (const element of document.querySelectorAll(selector)) {
+        addCandidate(element, "google-structured-entity", 50);
+      }
+    }
+
+    // Fallback for redesigned result pages: consider only prominent, non-link
+    // level-one/two headings. Ordinary organic result titles are normally h3s
+    // inside anchors and are deliberately excluded so a result snippet cannot
+    // masquerade as Google's interpretation of the query.
+    for (const element of document.querySelectorAll(
+      "h1, h2, [role='heading'][aria-level='1'], [role='heading'][aria-level='2']"
+    )) {
+      if (element.closest("a[href]")) continue;
+      const fontSize = parseFloat(getComputedStyle(element).fontSize || "0");
+      if (fontSize && fontSize < 22) continue;
+      addCandidate(element, "google-prominent-heading", 25);
+    }
+
+    candidates.sort((a, b) => b.confidence - a.confidence);
+    return candidates[0] || null;
+  }
+
+  function waitForGoogleCanonicalContext(query, timeoutMs = 320) {
+    const immediate = extractGoogleCanonicalContext(query);
+    if (immediate) return Promise.resolve(immediate);
+
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        observer.disconnect();
+        clearTimeout(timer);
+        resolve(value || null);
+      };
+
+      const observer = new MutationObserver(() => {
+        if (query !== getQuery()) return finish(null);
+        const context = extractGoogleCanonicalContext(query);
+        if (context) finish(context);
+      });
+
+      observer.observe(document.body, { childList: true, subtree: true });
+      const timer = setTimeout(() => finish(extractGoogleCanonicalContext(query)), timeoutMs);
+    });
+  }
+
+
   function makeElement(tag, className, text) {
     const el = document.createElement(tag);
     if (className) el.className = className;
@@ -909,10 +1134,14 @@
     const serial = ++requestSerial;
 
     try {
+      const googleContext = await waitForGoogleCanonicalContext(query);
+      if (serial !== requestSerial || query !== getQuery()) return;
+
       const result = await browser.runtime.sendMessage({
         type: "googlepedia:lookup",
         query,
-        language: getLanguage()
+        language: getLanguage(),
+        googleContext
       });
 
       if (serial !== requestSerial || query !== getQuery()) return;
