@@ -65,9 +65,11 @@ Temporary extensions loaded this way are removed when Firefox restarts.
 
 ## Project status
 
-The current release-preparation build is **v0.7.2**. The last frozen beta baseline is **v0.6.9**.
+The current release candidate is v0.7.8.
 
-Before public v1.0 release, the project will complete Mozilla/AMO privacy and packaging review, final icon/branding review, regression testing, and public repository setup.
+GooWi is in pre-1.0 development and is being prepared for its first public release through Mozilla Add-ons (AMO). The extension has completed its primary regression test suite, Mozilla web-ext validation, privacy/data-transmission review, and public repository setup.
+
+The first AMO release will be published as an experimental pre-1.0 version while real-world use and feedback inform the eventual v1.0 release.
 
 ## Authorship and license
 
