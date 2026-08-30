@@ -53,15 +53,15 @@ GooWi declares `searchTerms` as required transmitted data under Firefox's built-
 
 ## Temporary installation for testing
 
-Until GooWi is publicly distributed through Mozilla Add-ons:
+Until GooWi is publicly distributed through the Chrome Web Store:
 
-1. Download or clone the source.
-2. Open `about:debugging` in Firefox.
-3. Select **This Firefox**.
-4. Choose **Load Temporary Add-on…**.
-5. Select `manifest.json` from the GooWi source directory.
+1. Download or clone the `chrome-port` branch.
+2. Open `chrome://extensions` in Chrome or another Chromium-based browser.
+3. Enable **Developer mode**.
+4. Choose **Load unpacked**.
+5. Select the GooWi source directory containing `manifest.json`.
 
-Temporary extensions loaded this way are removed when Firefox restarts.
+Extensions loaded this way remain installed until removed, but may need to be reloaded after source changes.
 
 ## Project status
 
