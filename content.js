@@ -1,5 +1,9 @@
 (() => {
+  if (globalThis.__goowiContentLoaded) return;
+  globalThis.__goowiContentLoaded = true;
+
   const PANEL_ID = "googlepedia-reborn-panel";
+  const MAX_SELECTION_LENGTH = 75;
   const MAX_PARAGRAPHS = 8;
   const MAX_SECTIONS = 3;
   const MAX_LISTS = 8;
@@ -13,6 +17,12 @@
   let requestSerial = 0;
   let currentResult = null;
   let raceState = null;
+  let selectionSession = null;
+
+  function isGoogleSearchPage() {
+    const host = location.hostname.toLowerCase();
+    return (host === "google.com" || host === "www.google.com") && location.pathname === "/search";
+  }
 
   function getQuery() {
     const params = new URLSearchParams(location.search);
@@ -20,24 +30,92 @@
   }
 
   function getLanguage() {
-    const params = new URLSearchParams(location.search);
-    const hl = params.get("hl");
-    if (hl) return hl;
+    if (isGoogleSearchPage()) {
+      const params = new URLSearchParams(location.search);
+      const hl = params.get("hl");
+      if (hl) return hl;
+    }
     return document.documentElement.lang || navigator.language || "en";
   }
 
+  function cleanSelectionText(value) {
+    return String(value || "").replace(/\s+/g, " ").trim();
+  }
 
+  function selectionLength(value) {
+    return Array.from(String(value || "")).length;
+  }
+
+  function activeLookupQuery() {
+    return selectionSession?.active ? selectionSession.currentQuery : getQuery();
+  }
+
+  function sourceQueryIsCurrent(query) {
+    if (selectionSession?.active) {
+      if (query !== selectionSession.currentQuery) return false;
+      if (isGoogleSearchPage() && getQuery() !== selectionSession.googleQueryAtStart) return false;
+      return true;
+    }
+    return query === getQuery();
+  }
+
+  function selectionModeActive() {
+    return Boolean(selectionSession?.active);
+  }
 
   const GOOGLE_GENERIC_HEADINGS = new Set([
-    "ai overview", "overview", "people also ask", "people also search for",
-    "images", "videos", "shopping", "news", "maps", "forums", "web results",
-    "search results", "wikipedia", "ratings", "read now", "more results"
+    "ai overview", "overview", "description", "definition", "definition and origin",
+    "origin", "people also ask", "people also search for", "images", "videos",
+    "shopping", "news", "maps", "forums", "web results", "search results",
+    "wikipedia", "ratings", "read now", "more results", "quick facts", "listen",
+    "events", "books", "born", "died", "party", "spouse", "children", "parents",
+    "siblings", "education", "awards", "works", "references", "see also"
   ]);
+
+  // Google frequently renders an entity name and a short type/subtitle as
+  // neighboring headings. The subtitle is useful evidence but must never become
+  // the canonical Wikipedia topic by itself ("The Fab Four" / "Band").
+  const GOOGLE_ENTITY_TYPE_LABELS = new Set([
+    "band", "rock band", "musical group", "music group", "artist", "musician",
+    "singer", "singer songwriter", "actor", "actress", "writer", "author",
+    "writer and academic", "poet", "politician", "president", "emperor",
+    "film", "movie", "tv series", "television series", "book", "novel",
+    "album", "song", "company", "corporation", "organization", "organisation",
+    "city", "town", "village", "country", "state", "province", "region",
+    "software", "video game", "website", "school", "university"
+  ]);
+
+  // Broader vocabulary used only to recognize Google's short entity subtitle.
+  // The subtitle is carried as a sense/disambiguation hint; it is never allowed
+  // to become the canonical Wikipedia title by itself.
+  const GOOGLE_ENTITY_TYPE_KEYWORDS = new Set([
+    "academic", "activist", "actor", "actress", "album", "animal", "artist",
+    "athlete", "author", "band", "book", "city", "company", "composer",
+    "corporation", "country", "director", "emperor", "film", "footballer",
+    "game", "group", "king", "musician", "novel", "organization",
+    "organisation", "painter", "philosopher", "physicist", "player", "poet",
+    "politician", "president", "producer", "province", "queen", "rapper",
+    "region", "school", "scientist", "series", "singer", "song", "songwriter",
+    "software", "species", "state", "town", "university", "village", "website",
+    "writer"
+  ]);
+
+  const GOOGLE_RELATED_PAGE_PREFIXES = [
+    "influences on", "influence of", "works of", "bibliography of",
+    "legacy of", "history of", "list of", "timeline of", "discography of",
+    "filmography of", "portrayal of", "reception of", "religious views of",
+    "political views of", "personal life of", "early life of", "death of",
+    "assassination of", "family of", "descendants of", "ancestry of",
+    "cultural depictions of"
+  ];
 
   function normalizeGoogleSignalText(value) {
     return String(value || "")
       .normalize("NFKD")
       .replace(/[\u0300-\u036f]/g, "")
+      // Match Wikipedia/Google's spaced dotted initials to compact user input:
+      // "J. R. R." -> "JRR", "J.F.K." -> "JFK", "U. S." -> "US".
+      .replace(/\b(?:[A-Za-z]\.\s*)+[A-Za-z]\./g, (match) => match.replace(/[\s.]+/g, ""))
       .replace(/&/g, " and ")
       .replace(/[’']/g, "")
       .toLowerCase()
@@ -86,6 +164,30 @@
     return true;
   }
 
+  function googleOrderedSubsequenceWithinSpan(needles, haystack, maxGap = 2, maxExtraSpan = 3) {
+    if (!needles.length || !haystack.length) return false;
+    let searchFrom = 0;
+    let first = -1;
+    let previous = -1;
+
+    for (const needle of needles) {
+      let found = -1;
+      for (let index = searchFrom; index < haystack.length; index += 1) {
+        if (haystack[index] === needle) {
+          found = index;
+          break;
+        }
+      }
+      if (found < 0) return false;
+      if (previous >= 0 && found - previous - 1 > maxGap) return false;
+      if (first < 0) first = found;
+      previous = found;
+      searchFrom = found + 1;
+    }
+
+    return (previous - first + 1) <= (needles.length + maxExtraSpan);
+  }
+
   function googleTopicAcronymVariants(value) {
     const rawTokens = normalizeGoogleSignalText(value).split(" ").filter(Boolean);
     const variants = new Set();
@@ -128,47 +230,300 @@
     return best.slice(0, 2400);
   }
 
-  function googleCanonicalScore(query, title, evidence, baseScore) {
+  function titleTokensAreQuerySubset(query, title) {
+    const querySet = new Set(googleSignalTokens(query));
+    const titleTokens = googleSignalTokens(title);
+    return titleTokens.length > 0 && titleTokens.every((token) => querySet.has(token));
+  }
+
+  function stripGoogleEntityTypeSuffix(value) {
+    const raw = String(value || "").replace(/\s+/g, " ").trim();
+    const norm = normalizeGoogleSignalText(raw);
+    if (!norm) return raw;
+
+    const suffixes = [...GOOGLE_ENTITY_TYPE_LABELS].sort((a, b) => b.length - a.length);
+    for (const suffix of suffixes) {
+      if (norm === suffix) return raw;
+      if (!norm.endsWith(` ${suffix}`)) continue;
+
+      const normalizedStem = norm.slice(0, -(suffix.length + 1)).trim();
+      if (!normalizedStem) continue;
+
+      const rawWords = raw.split(/\s+/);
+      const suffixWords = suffix.split(" ").length;
+      if (rawWords.length > suffixWords) {
+        return rawWords.slice(0, rawWords.length - suffixWords).join(" ").trim();
+      }
+    }
+    return raw;
+  }
+
+  function looksLikeGoogleEntityType(value) {
+    const raw = String(value || "").replace(/\s+/g, " ").trim();
+    if (!raw || raw.length > 110) return false;
+    const norm = normalizeGoogleSignalText(raw);
+    if (!norm ||
+        GOOGLE_GENERIC_HEADINGS.has(norm) ||
+        norm === "wikipedia" ||
+        norm === "see results about") {
+      return false;
+    }
+
+    const tokens = norm.split(" ").filter(Boolean);
+    return tokens.some((token) => GOOGLE_ENTITY_TYPE_KEYWORDS.has(token));
+  }
+
+  function extractGoogleEntityType(element, titleValue = "") {
+    if (!element) return "";
+
+    const titleNorm = normalizeGoogleSignalText(titleValue);
+    let node = element;
+
+    for (let depth = 0; depth < 4 && node; depth += 1, node = node.parentElement) {
+      if (node.closest?.(`#${PANEL_ID}`)) break;
+
+      const lines = String(node.innerText || node.textContent || "")
+        .split(/\n+/)
+        .map((line) => line.replace(/\s+/g, " ").trim())
+        .filter(Boolean)
+        .slice(0, 18);
+
+      if (!lines.length) continue;
+
+      let titleIndex = lines.findIndex(
+        (line) => normalizeGoogleSignalText(line) === titleNorm
+      );
+      if (titleIndex < 0) {
+        titleIndex = lines.findIndex((line) => {
+          const norm = normalizeGoogleSignalText(line);
+          return titleNorm && (norm.startsWith(`${titleNorm} `) || norm.endsWith(` ${titleNorm}`));
+        });
+      }
+
+      const ordered = titleIndex >= 0
+        ? [...lines.slice(titleIndex + 1, titleIndex + 5), ...lines.slice(0, titleIndex)]
+        : lines;
+
+      for (const line of ordered) {
+        const norm = normalizeGoogleSignalText(line);
+        if (!norm || norm === titleNorm || GOOGLE_GENERIC_HEADINGS.has(norm)) continue;
+        if (looksLikeGoogleEntityType(line)) return line.slice(0, 110);
+      }
+    }
+
+    return "";
+  }
+
+  function googleRelationWordRequested(query, prefix) {
+    const queryTokens = googleSignalTokens(query).map((token) => token.replace(/s$/i, ""));
+    const relationToken = googleSignalTokens(prefix)[0]?.replace(/s$/i, "");
+    return Boolean(relationToken && queryTokens.includes(relationToken));
+  }
+
+  function googleRelatedPagePenalty(query, title) {
+    const titleNorm = normalizeGoogleSignalText(title);
+    for (const prefix of GOOGLE_RELATED_PAGE_PREFIXES) {
+      if (!titleNorm.startsWith(`${prefix} `) && titleNorm !== prefix) continue;
+      return googleRelationWordRequested(query, prefix) ? 0 : 65;
+    }
+    return 0;
+  }
+
+  function googleCanonicalScore(query, title, evidence, source, baseScore, entityType = "") {
     const queryNorm = normalizeGoogleSignalText(query);
     const titleNorm = normalizeGoogleSignalText(title);
-    if (!queryNorm || !titleNorm || queryNorm === titleNorm) return 0;
+    if (!queryNorm || !titleNorm) return 0;
+    if (queryNorm === titleNorm && !entityType) return 0;
     if (GOOGLE_GENERIC_HEADINGS.has(titleNorm)) return 0;
-    if (titleNorm.length < 2 || titleNorm.length > 140) return 0;
+    if (GOOGLE_ENTITY_TYPE_LABELS.has(titleNorm)) return 0;
+    if (titleNorm.length < 2 || titleNorm.length > 160) return 0;
 
     const queryTokens = googleSignalTokens(query);
     const titleTokens = googleSignalTokens(title);
     const evidenceTokens = googleSignalTokens(evidence);
     if (!queryTokens.length || !titleTokens.length) return 0;
 
-    let score = baseScore;
     const rawCompact = queryNorm.replace(/\s+/g, "");
     const titleAcronyms = googleTopicAcronymVariants(title);
-    if (rawCompact.length >= 2 && rawCompact.length <= 12 && titleAcronyms.has(rawCompact)) {
-      score += 45;
+    const acronymMatch = rawCompact.length >= 2 &&
+      rawCompact.length <= 12 &&
+      titleAcronyms.has(rawCompact);
+
+    // "See results about" is Google's explicit entity-disambiguation UI. Use it
+    // only when the chip entity is already represented by the user's own query.
+    // This lets "The Fab Four Beatles" use "The Beatles" without forcing a broad
+    // query such as "Mercury" into an arbitrary chip.
+    if (source === "google-see-results-about") {
+      if (queryTokens.length < 2 || !titleTokensAreQuerySubset(query, title)) return 0;
+      baseScore += 90;
     }
 
     const titleCoverage = googleTokenCoverage(queryTokens, titleTokens);
+    const titleInsideQueryCoverage = googleTokenCoverage(titleTokens, queryTokens);
     const evidenceCoverage = googleTokenCoverage(queryTokens, evidenceTokens);
+    const tightOrderedEvidence = googleOrderedSubsequenceWithinSpan(
+      queryTokens, evidenceTokens, 2, 3
+    );
+
+    // The generic large-heading fallback normally needs direct lexical
+    // relationship to the query. A zero-overlap alias is allowed only when the
+    // query is a longer name, Google supplies a genuine entity-type subtitle,
+    // and every query token occurs tightly and in order in bounded entity
+    // evidence. This is the formal-name path for cases like
+    // "Gaius Caesar Augustus Germanicus" -> "Caligula".
+    const strongZeroOverlapEntityAlias =
+      source === "google-entity-heading" &&
+      titleCoverage === 0 &&
+      titleInsideQueryCoverage === 0 &&
+      queryTokens.length >= 3 &&
+      looksLikeGoogleEntityType(entityType) &&
+      evidenceCoverage === 1 &&
+      tightOrderedEvidence;
+
+    if (source === "google-entity-heading" &&
+        !acronymMatch &&
+        titleCoverage === 0 &&
+        titleInsideQueryCoverage === 0 &&
+        !strongZeroOverlapEntityAlias) {
+      return 0;
+    }
+
+    let score = baseScore;
+    if (queryNorm === titleNorm && entityType) score += 35;
+    if (entityType && looksLikeGoogleEntityType(entityType)) score += 8;
+    if (acronymMatch) score += 45;
     score += titleCoverage * 30;
+    score += titleInsideQueryCoverage * 25;
     score += evidenceCoverage * 25;
 
     if (googleOrderedSubsequence(queryTokens, evidenceTokens, 2)) score += 25;
     if (normalizeGoogleSignalText(evidence).includes(queryNorm)) score += 10;
     if (titleCoverage === 1) score += 10;
 
+    if (source === "google-wikipedia-result") {
+      score -= googleRelatedPagePenalty(query, title);
+    }
+
     return score;
   }
 
-  function extractGoogleCanonicalContext(query) {
+  function wikipediaTitleFromGoogleHref(href) {
+    try {
+      let url = new URL(String(href || ""), location.href);
+
+      // Some Google result layouts wrap outbound links in /url redirects. The
+      // destination is still visible in the page markup; unwrap it locally so
+      // the same conservative Wikipedia-result signal works in either layout.
+      if (/(?:^|\.)google\.[a-z.]+$/i.test(url.hostname) && url.pathname === "/url") {
+        const nested = url.searchParams.get("q") || url.searchParams.get("url");
+        if (nested) url = new URL(nested, location.href);
+      }
+
+      if (!/(?:^|\.)wikipedia\.org$/i.test(url.hostname)) return "";
+      const match = url.pathname.match(/^\/wiki\/(.+)$/);
+      if (!match) return "";
+      const title = decodeURIComponent(match[1])
+        .replace(/_/g, " ")
+        .split("#")[0]
+        .trim();
+      if (!title || /^(?:File|Special|Help|Template|Category|Portal|Wikipedia|Talk):/i.test(title)) {
+        return "";
+      }
+      return title;
+    } catch {
+      return "";
+    }
+  }
+
+  function sameResultWikipediaCard(heading) {
+    if (!heading) return null;
+
+    const headingText = String(heading.innerText || heading.textContent || "")
+      .replace(/\s+/g, " ").trim();
+    const headingNamesWikipedia = /\s(?:[-–—|]\s*)?Wikipedia$/i.test(headingText);
+
+    let node = heading.parentElement;
+    for (let depth = 0; depth < 5 && node; depth += 1, node = node.parentElement) {
+      if (node.closest?.(`#${PANEL_ID}`)) break;
+
+      const cardText = String(node.innerText || node.textContent || "")
+        .replace(/\s+/g, " ").trim();
+      if (!cardText) continue;
+      if (cardText.length > 1800) break;
+
+      // Crossing into a container with another result heading means we no
+      // longer have reliable same-card attribution. Do not let one result's
+      // Wikipedia label leak onto a neighboring heading.
+      const peerHeadings = [...node.querySelectorAll("h3, [role='heading']")]
+        .filter((candidate) =>
+          candidate !== heading &&
+          !candidate.contains(heading) &&
+          !heading.contains(candidate) &&
+          isVisibleGoogleElement(candidate)
+        );
+      if (peerHeadings.length) break;
+
+      if (headingNamesWikipedia) return node;
+
+      const attribution = [...node.querySelectorAll("cite, span, small, div")]
+        .find((candidate) => {
+          if (candidate === heading || candidate.contains(heading) || heading.contains(candidate)) {
+            return false;
+          }
+          if (!isVisibleGoogleElement(candidate)) return false;
+
+          const raw = String(candidate.innerText || candidate.textContent || "")
+            .replace(/\s+/g, " ").trim();
+          if (!raw || raw.length > 140) return false;
+          const norm = normalizeGoogleSignalText(raw);
+          return norm === "wikipedia" ||
+            /^(?:https\s+)?(?:[a-z]{2,3}\s+)?wikipedia\s+org\b/.test(norm) ||
+            /^wikipedia\s+(?:https\s+)?(?:[a-z]{2,3}\s+)?wikipedia\s+org\b/.test(norm);
+        });
+
+      if (attribution) return node;
+    }
+
+    return null;
+  }
+
+  function extractGoogleCanonicalContexts(query) {
     if (!query || !document.body) return null;
 
-    const candidates = [];
-    const seen = new Set();
+    const candidateMap = new Map();
+
+    function addRawCandidate(titleValue, evidenceValue, source, baseScore, entityTypeValue = "") {
+      const title = String(titleValue || "").replace(/\s+/g, " ").trim().slice(0, 160);
+      const evidence = String(evidenceValue || "").replace(/\s+/g, " ").trim().slice(0, 2400);
+      const entityType = String(entityTypeValue || "").replace(/\s+/g, " ").trim().slice(0, 110);
+      if (!title) return;
+
+      const titleKey = normalizeGoogleSignalText(title);
+      if (!titleKey || GOOGLE_GENERIC_HEADINGS.has(titleKey) || GOOGLE_ENTITY_TYPE_LABELS.has(titleKey)) return;
+      const key = `${titleKey}::${source}`;
+
+      const score = googleCanonicalScore(query, title, evidence, source, baseScore, entityType);
+      if (score < 75) return;
+
+      const candidate = {
+        title,
+        entityType: looksLikeGoogleEntityType(entityType) ? entityType : "",
+        evidence,
+        source,
+        confidence: Math.min(100, Math.round(score))
+      };
+      const prior = candidateMap.get(key);
+      if (!prior ||
+          candidate.confidence > prior.confidence ||
+          (!prior.entityType && candidate.entityType && candidate.confidence >= prior.confidence - 4)) {
+        candidateMap.set(key, candidate);
+      }
+    }
 
     function addCandidate(element, source, baseScore) {
       if (!isVisibleGoogleElement(element)) return;
 
-      const nestedHeading = element.matches("h1, h2, [role='heading']")
+      const nestedHeading = element.matches("h1, h2, h3, [role='heading']")
         ? element
         : element.querySelector("h1, h2, h3, [role='heading']");
       const rawTitle = String(
@@ -178,22 +533,71 @@
       ).replace(/\s+/g, " ").trim();
 
       if (!rawTitle) return;
-      const title = rawTitle.split(/\n/)[0].trim().slice(0, 140);
-      const key = normalizeGoogleSignalText(title);
-      if (!key || seen.has(key) || GOOGLE_GENERIC_HEADINGS.has(key)) return;
-
-      const evidence = boundedGoogleEvidence(nestedHeading || element);
-      const score = googleCanonicalScore(query, title, evidence, baseScore);
-      if (score < 75) return;
-
-      seen.add(key);
-      candidates.push({ title, evidence, source, confidence: Math.min(100, Math.round(score)) });
+      const title = rawTitle.split(/\n/)[0].trim().slice(0, 160);
+      const titleElement = nestedHeading || element;
+      const evidence = boundedGoogleEvidence(titleElement);
+      const entityType = extractGoogleEntityType(titleElement, title);
+      addRawCandidate(title, evidence, source, baseScore, entityType);
     }
 
-    // Google's entity/knowledge modules have used several stable semantic
-    // attributes and a handful of long-lived title classes. These are treated
-    // as high-confidence signals when present, but GooWi does not depend on any
-    // one of them.
+    // Extract Google's explicit "See results about" chip directly instead of
+    // inferring it from nearby text. This keeps the entity name separate from
+    // its subtitle/type and makes the signal reliable across card layouts.
+    const seeResultsLabels = [...document.querySelectorAll("div, span, p")]
+      .filter((element) =>
+        isVisibleGoogleElement(element) &&
+        normalizeGoogleSignalText(element.innerText || element.textContent || "") === "see results about"
+      );
+
+    for (const label of seeResultsLabels) {
+      let container = label.parentElement;
+      for (let depth = 0; depth < 5 && container; depth += 1, container = container.parentElement) {
+        if (container.closest(`#${PANEL_ID}`)) break;
+        const containerText = (container.innerText || container.textContent || "").trim();
+        if (!containerText || containerText.length > 700) continue;
+
+        const links = [...container.querySelectorAll("a[href], [role='link']")]
+          .filter((element) => isVisibleGoogleElement(element));
+
+        let found = false;
+        for (const link of links) {
+          const lines = String(link.innerText || link.textContent || "")
+            .split(/\n+/)
+            .map((line) => line.replace(/\s+/g, " ").trim())
+            .filter(Boolean);
+
+          for (const rawLine of lines) {
+            const stripped = stripGoogleEntityTypeSuffix(rawLine);
+            const norm = normalizeGoogleSignalText(stripped);
+            if (!norm ||
+                norm === "see results about" ||
+                GOOGLE_GENERIC_HEADINGS.has(norm) ||
+                GOOGLE_ENTITY_TYPE_LABELS.has(norm)) {
+              continue;
+            }
+
+            const entityType = extractGoogleEntityType(link, stripped) ||
+              (looksLikeGoogleEntityType(rawLine.replace(stripped, "").trim())
+                ? rawLine.replace(stripped, "").trim()
+                : "");
+            addRawCandidate(
+              stripped,
+              boundedGoogleEvidence(container),
+              "google-see-results-about",
+              96,
+              entityType
+            );
+            found = true;
+            break;
+          }
+          if (found) break;
+        }
+        if (found) break;
+      }
+    }
+
+    // Google's explicit entity/knowledge structures remain the preferred DOM
+    // signal when available.
     const structuredSelectors = [
       "[data-attrid='title']",
       "[data-entityname]",
@@ -204,52 +608,195 @@
     ];
     for (const selector of structuredSelectors) {
       for (const element of document.querySelectorAll(selector)) {
-        addCandidate(element, "google-structured-entity", 50);
+        addCandidate(element, "google-structured-entity", 70);
       }
     }
 
-    // Fallback for redesigned result pages: consider only prominent, non-link
-    // level-one/two headings. Ordinary organic result titles are normally h3s
-    // inside anchors and are deliberately excluded so a result snippet cannot
-    // masquerade as Google's interpretation of the query.
+    // A visible Wikipedia result selected by Google is a useful high-confidence
+    // fallback for aliases that are difficult to validate lexically, such as
+    // "Abe Lincoln" -> "Abraham Lincoln" or "JFK" -> "John F. Kennedy".
+    // This is still only a context signal: the background matcher validates it
+    // and Wikipedia remains the content source.
+    const wikiLinks = [...document.querySelectorAll("a[href]")]
+      .filter((link) => isVisibleGoogleElement(link) && wikipediaTitleFromGoogleHref(link.href))
+      .sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top)
+      .slice(0, 5);
+
+    wikiLinks.forEach((link, index) => {
+      const urlTitle = wikipediaTitleFromGoogleHref(link.href);
+      const heading = link.querySelector("h3, [role='heading']") ||
+        link.closest("div")?.querySelector("h3, [role='heading']");
+      const displayTitle = String(heading?.innerText || heading?.textContent || urlTitle)
+        .replace(/\s+/g, " ").trim();
+      const canonicalTitle = urlTitle || displayTitle;
+      const titleElement = heading || link;
+      const evidence = boundedGoogleEvidence(titleElement);
+      const entityType = extractGoogleEntityType(titleElement, canonicalTitle);
+      addRawCandidate(
+        canonicalTitle,
+        evidence,
+        "google-wikipedia-result",
+        78 - (index * 3),
+        entityType
+      );
+    });
+
+    // Some Google layouts display a Wikipedia result card while wrapping the
+    // outbound link in markup that does not expose the final wikipedia.org URL
+    // directly. Fall back only when Wikipedia attribution is proven inside the
+    // same bounded result card. A broad ancestor containing neighboring results
+    // is deliberately rejected so one result cannot inherit another's source.
+    for (const heading of document.querySelectorAll("h3, [role='heading']")) {
+      if (!isVisibleGoogleElement(heading) || heading.closest(`#${PANEL_ID}`)) continue;
+      const title = String(heading.innerText || heading.textContent || "")
+        .replace(/\s+/g, " ").trim()
+        .replace(/\s+(?:[-–—|]\s*)?Wikipedia$/i, "")
+        .trim();
+      if (!title || title.length > 160) continue;
+
+      const resultCard = sameResultWikipediaCard(heading);
+      if (!resultCard) continue;
+
+      const evidence = String(resultCard.innerText || resultCard.textContent || "")
+        .replace(/\s+/g, " ").trim().slice(0, 1800);
+      addRawCandidate(
+        title,
+        evidence,
+        "google-wikipedia-result",
+        76,
+        ""
+      );
+    }
+
+    // Fallback for redesigned result pages. Restrict candidates to prominent
+    // upper-page headings and reject generic interface/section labels.
     for (const element of document.querySelectorAll(
       "h1, h2, [role='heading'][aria-level='1'], [role='heading'][aria-level='2']"
     )) {
-      if (element.closest("a[href]")) continue;
+      if (!isVisibleGoogleElement(element) || element.closest("a[href]")) continue;
+      const rect = element.getBoundingClientRect();
+      if (rect.top > Math.max(1000, window.innerHeight * 1.15)) continue;
       const fontSize = parseFloat(getComputedStyle(element).fontSize || "0");
-      if (fontSize && fontSize < 22) continue;
-      addCandidate(element, "google-prominent-heading", 25);
+      if (fontSize && fontSize < 18) continue;
+      addCandidate(element, "google-entity-heading", 62);
     }
 
-    candidates.sort((a, b) => b.confidence - a.confidence);
-    return candidates[0] || null;
+    const candidates = [...candidateMap.values()]
+      .sort((a, b) => {
+        const sourceDelta = googleContextSourceRank(b) - googleContextSourceRank(a);
+        if (sourceDelta) return sourceDelta;
+        return Number(b.confidence || 0) - Number(a.confidence || 0);
+      });
+    return candidates.slice(0, 8);
   }
 
-  function waitForGoogleCanonicalContext(query, timeoutMs = 320) {
-    const immediate = extractGoogleCanonicalContext(query);
-    if (immediate) return Promise.resolve(immediate);
+  function extractGoogleCanonicalContext(query) {
+    return extractGoogleCanonicalContexts(query)[0] || null;
+  }
 
+  function googleContextSourceRank(context) {
+    if (!context) return 0;
+    if (context.source === "google-see-results-about") return 5;
+    if (context.source === "google-structured-entity") return 4;
+    if (context.source === "google-entity-heading" && context.entityType) return 4;
+    if (context.source === "google-wikipedia-result") return 3;
+    if (context.source === "google-entity-heading") return 2;
+    return 1;
+  }
+
+  function mergeGoogleContexts(targetMap, candidates) {
+    for (const candidate of candidates || []) {
+      if (!candidate?.title || !candidate?.source) continue;
+      const key = `${normalizeGoogleSignalText(candidate.title)}::${candidate.source}`;
+      const prior = targetMap.get(key);
+      if (!prior ||
+          Number(candidate.confidence || 0) > Number(prior.confidence || 0) ||
+          (!prior.entityType && candidate.entityType)) {
+        targetMap.set(key, candidate);
+      }
+    }
+  }
+
+  function rankedGoogleContexts(contextMap) {
+    return [...contextMap.values()]
+      .sort((a, b) => {
+        const sourceDelta = googleContextSourceRank(b) - googleContextSourceRank(a);
+        if (sourceDelta) return sourceDelta;
+        if (Boolean(b.entityType) !== Boolean(a.entityType)) return b.entityType ? 1 : -1;
+        return Number(b.confidence || 0) - Number(a.confidence || 0);
+      })
+      .slice(0, 6);
+  }
+
+  function contextsContainIndependentSupport(contexts) {
+    const byTitle = new Map();
+    for (const context of contexts || []) {
+      const key = normalizeGoogleSignalText(context.title);
+      if (!key) continue;
+      if (!byTitle.has(key)) byTitle.set(key, new Set());
+      byTitle.get(key).add(context.source);
+    }
+    return [...byTitle.values()].some((sources) => sources.size >= 2);
+  }
+
+  function waitForGoogleCanonicalContexts(query, timeoutMs = 1750) {
     return new Promise((resolve) => {
       let settled = false;
-      const finish = (value) => {
+      const collected = new Map();
+      const startedAt = Date.now();
+
+      const finish = () => {
         if (settled) return;
         settled = true;
         observer.disconnect();
-        clearTimeout(timer);
-        resolve(value || null);
+        clearInterval(poller);
+        clearTimeout(hardTimer);
+        resolve(rankedGoogleContexts(collected));
       };
 
-      const observer = new MutationObserver(() => {
-        if (query !== getQuery()) return finish(null);
-        const context = extractGoogleCanonicalContext(query);
-        if (context) finish(context);
-      });
+      const consider = () => {
+        if (query !== getQuery()) {
+          collected.clear();
+          finish();
+          return;
+        }
 
-      observer.observe(document.body, { childList: true, subtree: true });
-      const timer = setTimeout(() => finish(extractGoogleCanonicalContext(query)), timeoutMs);
+        mergeGoogleContexts(collected, extractGoogleCanonicalContexts(query));
+        const contexts = rankedGoogleContexts(collected);
+        const elapsed = Date.now() - startedAt;
+
+        if (contexts.some((context) => context.source === "google-see-results-about") &&
+            elapsed >= 450) {
+          finish();
+          return;
+        }
+        if (contextsContainIndependentSupport(contexts) && elapsed >= 900) {
+          finish();
+          return;
+        }
+        if (contexts.length >= 3 && elapsed >= 1150) finish();
+      };
+
+      const observer = new MutationObserver(consider);
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+        characterData: true
+      });
+      const poller = setInterval(consider, 100);
+      const hardTimer = setTimeout(() => {
+        consider();
+        finish();
+      }, timeoutMs);
+
+      consider();
     });
   }
 
+  function waitForGoogleCanonicalContext(query, timeoutMs = 1750) {
+    return waitForGoogleCanonicalContexts(query, timeoutMs)
+      .then((contexts) => contexts[0] || null);
+  }
 
   function makeElement(tag, className, text) {
     const el = document.createElement(tag);
@@ -669,7 +1216,7 @@
       const newRace = makeElement("button", "gp-race-action", "New race");
       newRace.type = "button";
       newRace.title = "Start a new Wikirace from this article";
-      newRace.addEventListener("click", () => startWikirace(panel, panel.querySelector(".gp-body"), getQuery()));
+      newRace.addEventListener("click", () => startWikirace(panel, panel.querySelector(".gp-body"), activeLookupQuery()));
 
       raceButton.setAttribute("aria-pressed", "true");
       raceButton.title = "End Wikirace";
@@ -682,7 +1229,7 @@
       message.textContent = `Reached “${raceState.targetTitle}” in ${raceState.clicksUsed} click${raceState.clicksUsed === 1 ? "" : "s"}.`;
       action.textContent = "New race";
       action.title = "Start a new Wikirace from this article";
-      action.addEventListener("click", () => startWikirace(panel, panel.querySelector(".gp-body"), getQuery()));
+      action.addEventListener("click", () => startWikirace(panel, panel.querySelector(".gp-body"), activeLookupQuery()));
       raceButton.setAttribute("aria-pressed", "false");
       raceButton.title = "Start a new Wikirace from this article";
       raceButton.setAttribute("aria-label", raceButton.title);
@@ -697,7 +1244,7 @@
     panel?.classList.remove("gp-race-loading");
     const body = panel?.querySelector(".gp-body");
     if (body && currentResult?.found) {
-      renderResult(body, currentResult, getQuery());
+      renderResult(body, currentResult, activeLookupQuery());
     }
     updateRaceUi(panel);
   }
@@ -722,7 +1269,7 @@
         excludeTitle: startTitle
       });
 
-      if (serial !== requestSerial || query !== getQuery() || !panel.isConnected) return;
+      if (serial !== requestSerial || !sourceQueryIsCurrent(query) || !panel.isConnected) return;
       if (!target?.found || !target.title) return;
 
       raceState = {
@@ -760,7 +1307,7 @@
     }
 
     const serial = ++requestSerial;
-    const query = getQuery();
+    const query = activeLookupQuery();
 
     try {
       const result = await chrome.runtime.sendMessage({
@@ -771,7 +1318,7 @@
 
       // Navigation inside GooWi belongs to the Google query that was visible when
       // the link was clicked. A later Google search must always win the race.
-      if (serial !== requestSerial || query !== getQuery() || !panel.isConnected) {
+      if (serial !== requestSerial || !sourceQueryIsCurrent(query) || !panel.isConnected) {
         return;
       }
 
@@ -800,7 +1347,7 @@
     panel.classList.add("gp-race-loading");
     updateRaceUi(panel);
     const serial = ++requestSerial;
-    const query = getQuery();
+    const query = activeLookupQuery();
 
     try {
       const result = await chrome.runtime.sendMessage({
@@ -809,7 +1356,7 @@
         language: currentResult?.language || getLanguage()
       });
 
-      if (serial !== requestSerial || query !== getQuery() || raceState !== state || !panel.isConnected) {
+      if (serial !== requestSerial || !sourceQueryIsCurrent(query) || raceState !== state || !panel.isConnected) {
         return;
       }
 
@@ -842,12 +1389,37 @@
     }
   }
 
+  function returnToSource() {
+    raceState = null;
+
+    if (selectionModeActive()) {
+      if (isGoogleSearchPage()) {
+        const googleQuery = getQuery();
+        selectionSession = null;
+        currentResult = null;
+        lastQuery = null;
+        removePanel();
+        loadForQuery(googleQuery);
+        return;
+      }
+
+      const rootQuery = selectionSession?.rootQuery || "";
+      if (rootQuery) {
+        loadForSelection(rootQuery, { preserveRoot: true });
+      }
+      return;
+    }
+
+    loadForQuery(getQuery(), true);
+  }
+
   function makeShell(query) {
     removePanel();
 
     const panel = makeElement("aside", "gp-panel");
     panel.id = PANEL_ID;
-    panel.setAttribute("aria-label", "Wikipedia result");
+    panel.setAttribute("aria-label", "GooWi Wikipedia reader");
+    if (selectionModeActive()) panel.classList.add("gp-selection-mode");
 
     const toolbar = makeElement("div", "gp-toolbar");
     const brandGroup = makeElement("div", "gp-brand-group");
@@ -865,22 +1437,31 @@
     via.title = "Open GooWi website";
     via.setAttribute("aria-label", "Open GooWi website");
     brandGroup.append(brand, via);
+
+    const donate = makeElement("a", "gp-icon-button gp-donate-button", "♡");
+    donate.href = "https://donate.wikimedia.org";
+    donate.target = "_blank";
+    donate.rel = "noopener noreferrer";
+    donate.title = "Donate to Wikimedia";
+    donate.setAttribute("aria-label", "Donate to Wikimedia");
+
     const controls = makeElement("div", "gp-controls");
 
     const refresh = makeElement("button", "gp-icon-button", "↻");
     refresh.type = "button";
-    refresh.title = "Return to Wikipedia article for this Google search";
-    refresh.setAttribute("aria-label", "Return to Wikipedia article for this Google search");
-    refresh.addEventListener("click", () => {
-      raceState = null;
-      loadForQuery(query, true);
-    });
+    refresh.title = selectionModeActive()
+      ? (isGoogleSearchPage()
+          ? "Return to Wikipedia article for this Google search"
+          : "Return to the first selection opened in GooWi")
+      : "Return to Wikipedia article for this Google search";
+    refresh.setAttribute("aria-label", refresh.title);
+    refresh.addEventListener("click", returnToSource);
 
     const random = makeElement("button", "gp-icon-button gp-random-button", "⚄");
     random.type = "button";
     random.title = "Random Wikipedia article";
     random.setAttribute("aria-label", "Random Wikipedia article");
-    random.addEventListener("click", () => loadRandomArticle(panel, body, query, random));
+    random.addEventListener("click", () => loadRandomArticle(panel, body, activeLookupQuery(), random));
 
     const race = makeElement("button", "gp-icon-button gp-race-button", "⚑");
     race.type = "button";
@@ -891,14 +1472,15 @@
       if (raceIsEngaged()) {
         cancelWikirace(panel);
       } else {
-        startWikirace(panel, body, query);
+        startWikirace(panel, body, activeLookupQuery());
       }
     });
 
     const overlay = makeElement("button", "gp-icon-button gp-overlay-button", "⛶");
     overlay.type = "button";
-    overlay.title = "Expand Wikipedia over Google";
-    overlay.setAttribute("aria-label", "Expand Wikipedia over Google");
+    const collapsedContext = selectionModeActive() ? "this page" : "Google";
+    overlay.title = `Expand Wikipedia over ${collapsedContext}`;
+    overlay.setAttribute("aria-label", overlay.title);
     overlay.setAttribute("aria-pressed", "false");
 
     function setOverlay(expanded) {
@@ -912,11 +1494,10 @@
       panel.classList.toggle("gp-expanded", expanded);
       document.documentElement.classList.toggle("googlepedia-reborn-overlay-open", expanded);
       overlay.textContent = expanded ? "⤡" : "⛶";
-      overlay.title = expanded ? "Restore Wikipedia side panel" : "Expand Wikipedia over Google";
-      overlay.setAttribute(
-        "aria-label",
-        expanded ? "Restore Wikipedia side panel" : "Expand Wikipedia over Google"
-      );
+      overlay.title = expanded
+        ? "Restore Wikipedia side panel"
+        : `Expand Wikipedia over ${collapsedContext}`;
+      overlay.setAttribute("aria-label", overlay.title);
       overlay.setAttribute("aria-pressed", expanded ? "true" : "false");
     }
 
@@ -939,7 +1520,7 @@
     });
 
     controls.append(race, random, refresh, overlay, collapse);
-    toolbar.append(brandGroup, controls);
+    toolbar.append(brandGroup, donate, controls);
 
     const racebar = makeElement("div", "gp-racebar");
     racebar.hidden = true;
@@ -1068,6 +1649,76 @@
     body.appendChild(footer);
   }
 
+  function renderSelectionNotice(body, message, detail = "") {
+    body.replaceChildren();
+    const empty = makeElement("div", "gp-empty");
+    empty.appendChild(makeElement("strong", "", message));
+    if (detail) empty.appendChild(makeElement("p", "gp-error-detail", detail));
+    body.appendChild(empty);
+  }
+
+  async function loadForSelection(rawSelection, options = {}) {
+    const query = cleanSelectionText(rawSelection);
+    if (!query) return;
+
+    const googleQueryAtStart = isGoogleSearchPage() ? getQuery() : "";
+    const existingSessionIsCurrent = Boolean(
+      selectionSession?.active &&
+      (!isGoogleSearchPage() || selectionSession.googleQueryAtStart === googleQueryAtStart)
+    );
+    const rootQuery = options.preserveRoot && selectionSession?.rootQuery
+      ? selectionSession.rootQuery
+      : (existingSessionIsCurrent ? selectionSession.rootQuery : query);
+
+    selectionSession = {
+      active: true,
+      rootQuery,
+      currentQuery: query,
+      googleQueryAtStart
+    };
+
+    raceState = null;
+    currentResult = null;
+    const serial = ++requestSerial;
+    const { panel, body } = makeShell(query);
+
+    if (selectionLength(query) > MAX_SELECTION_LENGTH) {
+      renderSelectionNotice(body, "Sheesh, keep it brief 🫠");
+      return;
+    }
+
+    try {
+      const result = await chrome.runtime.sendMessage({
+        type: "googlepedia:lookup",
+        query,
+        language: getLanguage(),
+        googleContexts: [],
+        googleContext: null
+      });
+
+      if (serial !== requestSerial || !sourceQueryIsCurrent(query) || !panel.isConnected) return;
+
+      if (!result?.found) {
+        currentResult = null;
+        renderSelectionNotice(body, "No confident Wikipedia match found.");
+        return;
+      }
+
+      currentResult = result;
+      renderResult(body, result, query);
+      updateRaceUi(panel);
+      body.scrollTop = 0;
+    } catch (error) {
+      if (serial !== requestSerial || !panel.isConnected) return;
+      currentResult = null;
+      renderSelectionNotice(
+        body,
+        "No confident Wikipedia match found.",
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+  }
+
   async function loadRandomArticle(panel, body, query, button) {
     if (!panel?.isConnected || !body || raceIsActive()) return;
 
@@ -1084,7 +1735,7 @@
       });
 
       // A random lookup must never outlive the Google search it belongs to.
-      if (serial !== requestSerial || query !== getQuery() || !panel.isConnected) return;
+      if (serial !== requestSerial || !sourceQueryIsCurrent(query) || !panel.isConnected) return;
       if (!result?.found) return;
 
       raceState = null;
@@ -1105,6 +1756,8 @@
   }
 
   async function loadForQuery(query, force = false) {
+    selectionSession = null;
+
     if (!query) {
       removePanel();
       lastQuery = null;
@@ -1134,14 +1787,15 @@
     const serial = ++requestSerial;
 
     try {
-      const googleContext = await waitForGoogleCanonicalContext(query);
+      const googleContexts = await waitForGoogleCanonicalContexts(query);
       if (serial !== requestSerial || query !== getQuery()) return;
 
       const result = await chrome.runtime.sendMessage({
         type: "googlepedia:lookup",
         query,
         language: getLanguage(),
-        googleContext
+        googleContexts,
+        googleContext: googleContexts[0] || null
       });
 
       if (serial !== requestSerial || query !== getQuery()) return;
@@ -1183,36 +1837,59 @@
     const overlay = panel.querySelector(".gp-overlay-button");
     if (overlay) {
       overlay.textContent = "⛶";
-      overlay.title = "Expand Wikipedia over Google";
-      overlay.setAttribute("aria-label", "Expand Wikipedia over Google");
+      overlay.title = selectionModeActive() ? "Expand Wikipedia over this page" : "Expand Wikipedia over Google";
+      overlay.setAttribute("aria-label", overlay.title);
       overlay.setAttribute("aria-pressed", "false");
     }
   });
 
   function syncWithLocation() {
+    if (!isGoogleSearchPage()) return;
+
     const query = getQuery();
+
+    if (selectionModeActive()) {
+      if (query !== selectionSession.googleQueryAtStart) {
+        selectionSession = null;
+        lastQuery = null;
+        currentResult = null;
+        raceState = null;
+        removePanel();
+        loadForQuery(query);
+      }
+      return;
+    }
+
     if (query !== lastQuery) {
       loadForQuery(query);
     }
   }
 
-  // Google updates search pages dynamically, so watch both DOM churn and URL changes.
-  let observedUrl = location.href;
-  const observer = new MutationObserver(() => {
-    if (location.href !== observedUrl) {
-      observedUrl = location.href;
-      syncWithLocation();
-    }
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message?.type !== "googlepedia:view-selection") return undefined;
+    loadForSelection(message.selection);
+    return undefined;
   });
 
-  observer.observe(document.documentElement, { childList: true, subtree: true });
-  window.addEventListener("popstate", syncWithLocation);
-  setInterval(() => {
-    if (location.href !== observedUrl) {
-      observedUrl = location.href;
-      syncWithLocation();
-    }
-  }, 1000);
+  if (isGoogleSearchPage()) {
+    // Google updates search pages dynamically, so watch both DOM churn and URL changes.
+    let observedUrl = location.href;
+    const observer = new MutationObserver(() => {
+      if (location.href !== observedUrl) {
+        observedUrl = location.href;
+        syncWithLocation();
+      }
+    });
 
-  syncWithLocation();
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+    window.addEventListener("popstate", syncWithLocation);
+    setInterval(() => {
+      if (location.href !== observedUrl) {
+        observedUrl = location.href;
+        syncWithLocation();
+      }
+    }, 1000);
+
+    syncWithLocation();
+  }
 })();

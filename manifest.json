@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "GooWi",
-  "version": "0.7.11",
-  "description": "Adds relevant Wikipedia context beside Google Search, with reading mode, Random Article, and a ten-click Wikirace challenge.",
+  "version": "0.8.0",
+  "description": "Adds relevant Wikipedia beside Google Search and opens GooWi on selected text anywhere in the browser, with reading mode, Random Article, and Wikirace.",
   "minimum_chrome_version": "99",
   "icons": {
     "16": "icons/icon-16.png",
@@ -33,5 +33,10 @@
       "run_at": "document_idle"
     }
   ],
-  "homepage_url": "https://github.com/oliversudduth/GooWi"
+  "homepage_url": "https://github.com/oliversudduth/GooWi",
+  "permissions": [
+    "contextMenus",
+    "activeTab",
+    "scripting"
+  ]
 }
