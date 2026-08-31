@@ -1,8 +1,8 @@
 # GooWi
 
-**Wikipedia context beside Google Search.**
+**Wikipedia context beside Google Search — and on demand from selected text anywhere on the web.**
 
-GooWi is an independent, open-source browser extension created by **Oliver Sudduth**. It places a concise, contextually relevant Wikipedia companion beside Google Search results while preserving Google as the search interface and Wikipedia as the destination for full articles.
+GooWi is an independent, open-source browser extension created by **Oliver Sudduth**. It places a concise, contextually relevant Wikipedia companion beside Google Search results and can also open the full GooWi reader for text selected on ordinary webpages. Wikipedia remains the encyclopedia source and destination for full articles.
 
 GooWi follows a simple rule:
 
@@ -15,6 +15,11 @@ Search engines are often excellent at prioritizing official, transactional, loca
 ## Features
 
 - Relevant Wikipedia previews beside Google Search results
+- **View in GooWi** context-menu lookup for selected words and phrases on ordinary webpages
+  - full GooWi reader injected only after explicit user invocation
+  - 75-character cleaned-selection limit
+  - selections over the limit show **“Sheesh, keep it brief 🫠”** without contacting Wikipedia
+  - explicit lookups with no trustworthy result show **“No confident Wikipedia match found.”**
 - Conservative relevance filtering that favors silence over misleading matches
 - Optional high-confidence Google-context-assisted matching
 - Wikipedia-assisted spelling correction for likely typos
@@ -31,6 +36,7 @@ Search engines are often excellent at prioritizing official, transactional, loca
   - unlimited overtime when Continue is chosen
 - Responsive full-width and half-screen desktop layouts
 - Light/dark appearance support
+- Centered **♡ Donate to Wikimedia** toolbar link opening `https://donate.wikimedia.org` in a new tab
 
 ## Product philosophy
 
@@ -42,21 +48,21 @@ Normal mode deliberately presents a condensed preview. A link at the end sends t
 
 GooWi has no analytics, ads, telemetry, accounts, persistent identifiers, or developer-operated backend service.
 
-To provide its primary feature, GooWi sends the current Google search term directly to Wikipedia. When a high-confidence Google entity/topic interpretation is visible, GooWi may also use that context locally and send the inferred canonical topic directly to Wikipedia for an additional candidate lookup.
+To provide its primary features, GooWi sends the current Google search term—or text the user explicitly selects with **View in GooWi**—directly to Wikipedia. When a high-confidence Google entity/topic interpretation is visible, GooWi may also use that context locally and send the inferred canonical topic directly to Wikipedia for an additional candidate lookup.
 
-The developer does not receive or retain users' search terms through GooWi.
+The developer does not receive or retain users' search terms or selected-text lookups through GooWi.
 
 See [PRIVACY.md](PRIVACY.md) for the complete policy.
 
 ## Permissions
 
-GooWi runs only on supported Google Search result pages and requests Wikipedia-domain access only to retrieve encyclopedia content.
+GooWi runs automatically only on supported Google Search result pages. For **View in GooWi**, it uses `contextMenus`, `activeTab`, and `scripting` so the reader can be injected into the single page where the user explicitly invokes it. GooWi does **not** request permanent `<all_urls>` host access. Wikipedia-domain access is used to retrieve encyclopedia content.
 
 ## Project status
 
-The current release candidate is **v0.7.11**.
+The current release candidate is **v0.8.0**.
 
-v0.7.10 was an unreleased development build whose matching improvements were incorporated into v0.7.11. v0.7.11 adds Google-context-assisted matching while retaining GooWi's conservative Wikipedia relevance filtering.
+v0.8.0 adds browser-wide **View in GooWi** selected-text lookup and the centered **♡ Donate to Wikimedia** toolbar link while preserving the v0.7.20 matcher. Selection mode reuses the full GooWi reader, including internal Wikipedia navigation, Random Article, expand/restore, and Wikirace.
 
 Firefox and Chrome builds are maintained and validated independently before store release.
 
