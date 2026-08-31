@@ -90,17 +90,17 @@ Issues: https://github.com/oliversudduth/GooWi/issues
 
 https://github.com/oliversudduth/GooWi
 
-## Temporary installation for testing — Firefox
+## Temporary installation for testing — Chrome / Chromium
 
-Until the current Firefox build is distributed through Mozilla Add-ons:
+Until the current Chrome build is distributed through the Chrome Web Store:
 
-1. Download or clone the `main` branch.
-2. Open `about:debugging` in Firefox.
-3. Choose **This Firefox**.
-4. Click **Load Temporary Add-on…**.
-5. Select `manifest.json` from the GooWi source directory.
+1. Download or clone the `chrome-port` branch.
+2. Open `chrome://extensions/` in Chrome or another Chromium browser.
+3. Enable **Developer mode**.
+4. Click **Load unpacked**.
+5. Select the GooWi source directory containing `manifest.json`.
 
-Temporary add-ons loaded this way are removed when Firefox restarts.
+The unpacked extension remains installed until you remove it or disable it. If you move or delete the source directory, Chrome will no longer be able to load that unpacked build.
 
 ## Firefox notes
 
