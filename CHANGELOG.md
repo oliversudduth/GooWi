@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.0
+
+- First stable general-public release of GooWi.
+- Promotes the fully tested v0.8.1 codebase to 1.0.0.
+- No functional code, matcher, permission, privacy, or UI behavior changes were introduced for the version promotion.
+- Establishes the stable Firefox and Chromium builds for extension-market publication.
+
 ## 0.8.1
 
 - Version synchronized with the Firefox v0.8.1 release.
