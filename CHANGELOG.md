@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.1
+
+- Added a Firefox-native sidebar fallback for **View in GooWi** when Firefox supplies selected text but blocks normal extension injection, primarily the built-in PDF viewer and compatible protected reading surfaces.
+- The native Firefox sidebar retains article navigation, Random Article, Return, Wikirace, the 75-character selection limit, explicit no-match feedback, and the centered Wikimedia donation link.
+- In Firefox native-sidebar mode, Expand opens the current article in a full GooWi reader tab and Collapse closes the native sidebar.
+- Added `sidebar_action` with `open_at_install: false`; no new data category or permanent all-sites host permission was added.
+- Preserved the v0.7.20 matcher unchanged.
+
 ## 0.8.0
 
 - Added **View in GooWi** to the browser context menu when text is selected.

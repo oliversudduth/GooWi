@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "GooWi",
-  "version": "0.8.0",
-  "description": "Brings relevant Wikipedia beside Google Search and opens GooWi on selected text anywhere in the browser, with reading mode, Random Article, and Wikirace.",
+  "version": "0.8.1",
+  "description": "Brings relevant Wikipedia beside Google Search and opens GooWi on selected text across the browser, including a Firefox sidebar fallback for protected readers such as the built-in PDF viewer.",
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
@@ -41,7 +41,7 @@
         "content.js"
       ],
       "css": [
-        "googlepedia.css"
+        "goowi.css"
       ],
       "run_at": "document_idle"
     }
@@ -55,5 +55,10 @@
     "contextMenus",
     "activeTab",
     "scripting"
-  ]
+  ],
+  "sidebar_action": {
+    "default_title": "GooWi",
+    "default_panel": "sidebar.html",
+    "open_at_install": false
+  }
 }

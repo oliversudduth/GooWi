@@ -135,3 +135,8 @@ https://github.com/oliversudduth/GooWi
 ## Support
 
 goowi.extension@gmail.com
+
+## Firefox protected-reader fallback (v0.8.1)
+
+On Firefox surfaces where the browser provides the selected text to the **View in GooWi** context-menu action but blocks ordinary page injection, GooWi may render the requested lookup inside its own Firefox extension sidebar instead. This changes only where the reader is displayed. The same selected text is sent directly to Wikipedia under the existing selection-limit and privacy rules. No additional data is sent to the developer.
+

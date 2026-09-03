@@ -1373,6 +1373,7 @@ async function randomWikipedia(language) {
 }
 
 const GOOWI_SELECTION_MENU_ID = "goowi-view-selection";
+let pendingNativeSidebarSelection = null;
 
 function cleanContextSelection(value) {
   return String(value || "").replace(/\s+/g, " ").trim().slice(0, 2000);
@@ -1387,15 +1388,74 @@ async function installSelectionContextMenu() {
       contexts: ["selection"]
     });
   } catch {
-    // Context menus may be unavailable on browser-protected surfaces.
+    // Context menus may be unavailable on some browser-controlled surfaces.
   }
 }
 
-async function showSelectionInTab(tabId, selection) {
+function isLikelyProtectedReaderSurface(info, tab) {
+  const urls = [info?.pageUrl, info?.frameUrl, tab?.url]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+
+  return urls.some((rawUrl) => {
+    const lower = rawUrl.toLowerCase();
+
+    if (/^(?:about:|resource:|chrome:|view-source:)/.test(lower)) return true;
+    if (lower.includes("pdf.js")) return true;
+    if (/\.pdf(?:$|[?#])/.test(lower)) return true;
+
+    try {
+      const parsed = new URL(rawUrl);
+      return parsed.hostname === "addons.mozilla.org";
+    } catch {
+      return false;
+    }
+  });
+}
+
+async function openNativeSidebar(selection, tabId) {
+  pendingNativeSidebarSelection = {
+    selection,
+    tabId,
+    updatedAt: Date.now()
+  };
+
+  try {
+    await browser.sidebarAction.open();
+  } catch {
+    return false;
+  }
+
+  // If the sidebar was already open this updates it immediately. If it is just
+  // being created, sidebar content also requests the pending selection on load.
+  try {
+    await browser.runtime.sendMessage({
+      type: "goowi:native-sidebar-selection",
+      selection,
+      tabId
+    });
+  } catch {
+    // The newly opened sidebar may not have registered its listener yet.
+  }
+
+  return true;
+}
+
+async function showSelectionInTab(tabId, selection, info, tab) {
   const message = {
-    type: "googlepedia:view-selection",
+    type: "goowi:view-selection",
     selection
   };
+
+  // Firefox's PDF.js viewer, Reader View, AMO, and other privileged surfaces
+  // may expose the selection context menu while refusing extension injection.
+  // Prefer the native sidebar immediately when the current surface is known to
+  // be one of those cases so sidebarAction.open() remains directly tied to the
+  // user's context-menu action.
+  if (isLikelyProtectedReaderSurface(info, tab)) {
+    await openNativeSidebar(selection, tabId);
+    return;
+  }
 
   try {
     await browser.tabs.sendMessage(tabId, message);
@@ -1408,7 +1468,7 @@ async function showSelectionInTab(tabId, selection) {
   try {
     await browser.scripting.insertCSS({
       target: { tabId },
-      files: ["googlepedia.css"]
+      files: ["goowi.css"]
     });
     await browser.scripting.executeScript({
       target: { tabId },
@@ -1416,8 +1476,8 @@ async function showSelectionInTab(tabId, selection) {
     });
     await browser.tabs.sendMessage(tabId, message);
   } catch {
-    // Firefox blocks script injection on protected pages such as about: pages,
-    // AMO, and other privileged browser surfaces. Fail quietly there.
+    // Fall back to the extension-owned Firefox sidebar if injection is refused.
+    await openNativeSidebar(selection, tabId);
   }
 }
 
@@ -1427,11 +1487,43 @@ browser.contextMenus.onClicked.addListener((info, tab) => {
   if (info?.menuItemId !== GOOWI_SELECTION_MENU_ID || !tab?.id) return;
   const selection = cleanContextSelection(info.selectionText);
   if (!selection) return;
-  showSelectionInTab(tab.id, selection);
+  showSelectionInTab(tab.id, selection, info, tab);
 });
 
-browser.runtime.onMessage.addListener((message) => {
-  if (message?.type === "googlepedia:lookup") {
+browser.runtime.onMessage.addListener((message, sender) => {
+  if (message?.type === "goowi:get-native-sidebar-selection") {
+    return Promise.resolve(pendingNativeSidebarSelection);
+  }
+
+  if (message?.type === "goowi:close-native-sidebar") {
+    return browser.sidebarAction.close()
+      .then(() => ({ ok: true }))
+      .catch(() => ({ ok: false }));
+  }
+
+  if (message?.type === "goowi:open-reader-tab") {
+    const query = String(message.query || "").trim().slice(0, 500);
+    if (!query) return Promise.resolve({ ok: false });
+
+    const language = String(message.language || "en").trim().slice(0, 16);
+    const url = new URL(browser.runtime.getURL("reader.html"));
+    url.searchParams.set("query", query);
+    url.searchParams.set("language", language);
+
+    return browser.tabs.create({ url: url.href })
+      .then((tab) => ({ ok: true, tabId: tab?.id ?? null }))
+      .catch(() => ({ ok: false }));
+  }
+
+  if (message?.type === "goowi:close-reader-tab") {
+    const tabId = sender?.tab?.id;
+    if (!tabId) return Promise.resolve({ ok: false });
+    return browser.tabs.remove(tabId)
+      .then(() => ({ ok: true }))
+      .catch(() => ({ ok: false }));
+  }
+
+  if (message?.type === "goowi:lookup") {
     const query = String(message.query || "").trim().slice(0, 500);
     if (!query) {
       return Promise.resolve({ found: false });
@@ -1448,7 +1540,7 @@ browser.runtime.onMessage.addListener((message) => {
       }));
   }
 
-  if (message?.type === "googlepedia:random") {
+  if (message?.type === "goowi:random") {
     return randomWikipedia(message.language)
       .catch((error) => ({
         found: false,
@@ -1456,7 +1548,7 @@ browser.runtime.onMessage.addListener((message) => {
       }));
   }
 
-  if (message?.type === "googlepedia:wikirace-target") {
+  if (message?.type === "goowi:wikirace-target") {
     return randomWikipediaTitle(message.language, message.excludeTitle)
       .catch((error) => ({
         found: false,
@@ -1464,7 +1556,7 @@ browser.runtime.onMessage.addListener((message) => {
       }));
   }
 
-  if (message?.type === "googlepedia:page") {
+  if (message?.type === "goowi:page") {
     const title = String(message.title || "").trim().slice(0, 500);
     if (!title) return Promise.resolve({ found: false });
 
