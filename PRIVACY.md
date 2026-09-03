@@ -135,3 +135,8 @@ https://github.com/oliversudduth/GooWi
 ## Support
 
 goowi.extension@gmail.com
+
+## Chromium v0.8.1
+
+Chromium's selected-text handling and privacy behavior are unchanged from v0.8.0. The v0.8.1 version number is aligned with the Firefox release; no additional Chromium data category or recipient is introduced.
+

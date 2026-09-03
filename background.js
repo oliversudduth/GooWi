@@ -1405,7 +1405,7 @@ function insertReaderCss(tabId) {
   return new Promise((resolve, reject) => {
     chrome.scripting.insertCSS({
       target: { tabId },
-      files: ["googlepedia.css"]
+      files: ["goowi.css"]
     }, () => {
       const error = chrome.runtime.lastError;
       if (error) reject(new Error(error.message));
@@ -1429,7 +1429,7 @@ function injectReaderScript(tabId) {
 
 async function showSelectionInTab(tabId, selection) {
   const message = {
-    type: "googlepedia:view-selection",
+    type: "goowi:view-selection",
     selection
   };
 
@@ -1463,7 +1463,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   let task;
 
-  if (message?.type === "googlepedia:lookup") {
+  if (message?.type === "goowi:lookup") {
     const query = String(message.query || "").trim().slice(0, 500);
     const googleContexts = Array.isArray(message.googleContexts)
       ? message.googleContexts
@@ -1471,11 +1471,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     task = query
       ? searchWikipedia(query, message.language, googleContexts)
       : Promise.resolve({ found: false });
-  } else if (message?.type === "googlepedia:random") {
+  } else if (message?.type === "goowi:random") {
     task = randomWikipedia(message.language);
-  } else if (message?.type === "googlepedia:wikirace-target") {
+  } else if (message?.type === "goowi:wikirace-target") {
     task = randomWikipediaTitle(message.language, message.excludeTitle);
-  } else if (message?.type === "googlepedia:page") {
+  } else if (message?.type === "goowi:page") {
     const title = String(message.title || "").trim().slice(0, 500);
     task = title
       ? wikipediaPageByTitle(title, message.language, "wikirace-link")

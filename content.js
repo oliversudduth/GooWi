@@ -2,7 +2,7 @@
   if (globalThis.__goowiContentLoaded) return;
   globalThis.__goowiContentLoaded = true;
 
-  const PANEL_ID = "googlepedia-reborn-panel";
+  const PANEL_ID = "goowi-panel";
   const MAX_SELECTION_LENGTH = 75;
   const MAX_PARAGRAPHS = 8;
   const MAX_SECTIONS = 3;
@@ -965,14 +965,14 @@
     }
 
     const tag = sourceList.tagName.toLowerCase() === "ol" ? "ol" : "ul";
-    const list = makeElement(tag, "gp-list");
+    const list = makeElement(tag, "goowi-list");
     let itemCount = 0;
 
     for (const sourceItem of sourceList.children) {
       if (sourceItem.tagName?.toLowerCase() !== "li") continue;
       if (itemCount >= remainingItems) break;
 
-      const item = makeElement("li", "gp-list-item");
+      const item = makeElement("li", "goowi-list-item");
 
       for (const child of sourceItem.childNodes) {
         if (child.nodeType === Node.ELEMENT_NODE &&
@@ -1006,7 +1006,7 @@
     const root = doc.querySelector(".mw-parser-output") || doc.body;
     if (!root) return null;
 
-    const container = makeElement("div", "gp-hatnotes");
+    const container = makeElement("div", "goowi-hatnotes");
     let count = 0;
 
     for (const sourceNote of root.querySelectorAll(".hatnote")) {
@@ -1014,7 +1014,7 @@
       if (sourceNote.parentElement?.closest(".hatnote")) continue;
       if (isInsideArticleChrome(sourceNote)) continue;
 
-      const note = makeElement("div", "gp-hatnote");
+      const note = makeElement("div", "goowi-hatnote");
       for (const child of sourceNote.childNodes) {
         appendSanitizedNode(note, child, { ...options, language });
       }
@@ -1114,8 +1114,8 @@
         const headingText = node.textContent?.replace("[edit]", "").trim();
         if (headingText) {
           const headingClass = tag === "h2"
-            ? "gp-section-heading"
-            : "gp-section-heading gp-subsection-heading";
+            ? "goowi-section-heading"
+            : "goowi-section-heading goowi-subsection-heading";
           output.appendChild(makeElement("h3", headingClass, headingText));
           if (tag === "h2") sectionCount += 1;
         }
@@ -1126,7 +1126,7 @@
   }
 
   function renderParagraph(sourceParagraph, language, options = {}) {
-    const p = makeElement("p", "gp-paragraph");
+    const p = makeElement("p", "goowi-paragraph");
 
     for (const child of sourceParagraph.childNodes) {
       appendSanitizedNode(p, child, options);
@@ -1138,8 +1138,8 @@
   function removePanel() {
     document.getElementById(PANEL_ID)?.remove();
     document.documentElement.classList.remove(
-      "googlepedia-reborn-visible",
-      "googlepedia-reborn-overlay-open"
+      "goowi-visible",
+      "goowi-overlay-open"
     );
   }
 
@@ -1165,9 +1165,9 @@
   function updateRaceUi(panel) {
     if (!panel?.isConnected) return;
 
-    const bar = panel.querySelector(".gp-racebar");
-    const raceButton = panel.querySelector(".gp-race-button");
-    const randomButton = panel.querySelector(".gp-random-button");
+    const bar = panel.querySelector(".goowi-racebar");
+    const raceButton = panel.querySelector(".goowi-race-button");
+    const randomButton = panel.querySelector(".goowi-random-button");
     if (!bar || !raceButton || !randomButton) return;
 
     bar.replaceChildren();
@@ -1182,9 +1182,9 @@
     }
 
     bar.hidden = false;
-    const label = makeElement("strong", "gp-race-label", "WIKIRACE");
-    const message = makeElement("span", "gp-race-message");
-    const action = makeElement("button", "gp-race-action");
+    const label = makeElement("strong", "goowi-race-label", "WIKIRACE");
+    const message = makeElement("span", "goowi-race-message");
+    const action = makeElement("button", "goowi-race-action");
     action.type = "button";
 
     if (raceState.status === "active") {
@@ -1213,10 +1213,10 @@
         updateRaceUi(panel);
       });
 
-      const newRace = makeElement("button", "gp-race-action", "New race");
+      const newRace = makeElement("button", "goowi-race-action", "New race");
       newRace.type = "button";
       newRace.title = "Start a new Wikirace from this article";
-      newRace.addEventListener("click", () => startWikirace(panel, panel.querySelector(".gp-body"), activeLookupQuery()));
+      newRace.addEventListener("click", () => startWikirace(panel, panel.querySelector(".goowi-body"), activeLookupQuery()));
 
       raceButton.setAttribute("aria-pressed", "true");
       raceButton.title = "End Wikirace";
@@ -1229,7 +1229,7 @@
       message.textContent = `Reached “${raceState.targetTitle}” in ${raceState.clicksUsed} click${raceState.clicksUsed === 1 ? "" : "s"}.`;
       action.textContent = "New race";
       action.title = "Start a new Wikirace from this article";
-      action.addEventListener("click", () => startWikirace(panel, panel.querySelector(".gp-body"), activeLookupQuery()));
+      action.addEventListener("click", () => startWikirace(panel, panel.querySelector(".goowi-body"), activeLookupQuery()));
       raceButton.setAttribute("aria-pressed", "false");
       raceButton.title = "Start a new Wikirace from this article";
       raceButton.setAttribute("aria-label", raceButton.title);
@@ -1241,8 +1241,8 @@
 
   function cancelWikirace(panel) {
     raceState = null;
-    panel?.classList.remove("gp-race-loading");
-    const body = panel?.querySelector(".gp-body");
+    panel?.classList.remove("goowi-race-loading");
+    const body = panel?.querySelector(".goowi-body");
     if (body && currentResult?.found) {
       renderResult(body, currentResult, activeLookupQuery());
     }
@@ -1252,7 +1252,7 @@
   async function startWikirace(panel, body, query) {
     if (!panel?.isConnected || !body || !currentResult?.found) return;
 
-    const raceButton = panel.querySelector(".gp-race-button");
+    const raceButton = panel.querySelector(".goowi-race-button");
     if (raceButton) {
       raceButton.disabled = true;
       raceButton.textContent = "…";
@@ -1264,7 +1264,7 @@
 
     try {
       const target = await chrome.runtime.sendMessage({
-        type: "googlepedia:wikirace-target",
+        type: "goowi:wikirace-target",
         language: currentResult.language || getLanguage(),
         excludeTitle: startTitle
       });
@@ -1299,7 +1299,7 @@
 
   async function navigateNormalArticle(title) {
     const panel = document.getElementById(PANEL_ID);
-    const body = panel?.querySelector(".gp-body");
+    const body = panel?.querySelector(".goowi-body");
     if (!panel?.isConnected || !body || raceIsEngaged()) return;
 
     if (normalizeRaceTitle(title) === normalizeRaceTitle(currentResult?.title)) {
@@ -1311,7 +1311,7 @@
 
     try {
       const result = await chrome.runtime.sendMessage({
-        type: "googlepedia:page",
+        type: "goowi:page",
         title,
         language: currentResult?.language || getLanguage()
       });
@@ -1335,7 +1335,7 @@
 
   async function navigateWikirace(title) {
     const panel = document.getElementById(PANEL_ID);
-    const body = panel?.querySelector(".gp-body");
+    const body = panel?.querySelector(".goowi-body");
     if (!panel?.isConnected || !body || !raceIsActive() || raceState.loading) return;
 
     if (normalizeRaceTitle(title) === normalizeRaceTitle(currentResult?.title)) {
@@ -1344,14 +1344,14 @@
 
     const state = raceState;
     state.loading = true;
-    panel.classList.add("gp-race-loading");
+    panel.classList.add("goowi-race-loading");
     updateRaceUi(panel);
     const serial = ++requestSerial;
     const query = activeLookupQuery();
 
     try {
       const result = await chrome.runtime.sendMessage({
-        type: "googlepedia:page",
+        type: "goowi:page",
         title,
         language: currentResult?.language || getLanguage()
       });
@@ -1385,7 +1385,7 @@
         updateRaceUi(panel);
       }
     } finally {
-      panel?.classList.remove("gp-race-loading");
+      panel?.classList.remove("goowi-race-loading");
     }
   }
 
@@ -1416,21 +1416,21 @@
   function makeShell(query) {
     removePanel();
 
-    const panel = makeElement("aside", "gp-panel");
+    const panel = makeElement("aside", "goowi-panel");
     panel.id = PANEL_ID;
     panel.setAttribute("aria-label", "GooWi Wikipedia reader");
-    if (selectionModeActive()) panel.classList.add("gp-selection-mode");
+    if (selectionModeActive()) panel.classList.add("goowi-selection-mode");
 
-    const toolbar = makeElement("div", "gp-toolbar");
-    const brandGroup = makeElement("div", "gp-brand-group");
-    const brand = makeElement("a", "gp-brand", "WIKIPEDIA");
+    const toolbar = makeElement("div", "goowi-toolbar");
+    const brandGroup = makeElement("div", "goowi-brand-group");
+    const brand = makeElement("a", "goowi-brand", "WIKIPEDIA");
     const wikiLanguage = String(getLanguage() || "en").toLowerCase().split("-")[0] || "en";
     brand.href = `https://${wikiLanguage}.wikipedia.org/wiki/Main_Page`;
     brand.target = "_blank";
     brand.rel = "noopener noreferrer";
     brand.title = "Open Wikipedia main page";
     brand.setAttribute("aria-label", "Open Wikipedia main page");
-    const via = makeElement("a", "gp-brand-via", "via GooWi");
+    const via = makeElement("a", "goowi-brand-via", "via GooWi");
     via.href = "https://github.com/oliversudduth/GooWi";
     via.target = "_blank";
     via.rel = "noopener noreferrer";
@@ -1438,16 +1438,16 @@
     via.setAttribute("aria-label", "Open GooWi website");
     brandGroup.append(brand, via);
 
-    const donate = makeElement("a", "gp-icon-button gp-donate-button", "♡");
+    const donate = makeElement("a", "goowi-icon-button goowi-donate-button", "♡");
     donate.href = "https://donate.wikimedia.org";
     donate.target = "_blank";
     donate.rel = "noopener noreferrer";
     donate.title = "Donate to Wikimedia";
     donate.setAttribute("aria-label", "Donate to Wikimedia");
 
-    const controls = makeElement("div", "gp-controls");
+    const controls = makeElement("div", "goowi-controls");
 
-    const refresh = makeElement("button", "gp-icon-button", "↻");
+    const refresh = makeElement("button", "goowi-icon-button", "↻");
     refresh.type = "button";
     refresh.title = selectionModeActive()
       ? (isGoogleSearchPage()
@@ -1457,13 +1457,13 @@
     refresh.setAttribute("aria-label", refresh.title);
     refresh.addEventListener("click", returnToSource);
 
-    const random = makeElement("button", "gp-icon-button gp-random-button", "⚄");
+    const random = makeElement("button", "goowi-icon-button goowi-random-button", "⚄");
     random.type = "button";
     random.title = "Random Wikipedia article";
     random.setAttribute("aria-label", "Random Wikipedia article");
     random.addEventListener("click", () => loadRandomArticle(panel, body, activeLookupQuery(), random));
 
-    const race = makeElement("button", "gp-icon-button gp-race-button", "⚑");
+    const race = makeElement("button", "goowi-icon-button goowi-race-button", "⚑");
     race.type = "button";
     race.title = "Start Wikirace — reach a random article in ten clicks";
     race.setAttribute("aria-label", race.title);
@@ -1476,7 +1476,7 @@
       }
     });
 
-    const overlay = makeElement("button", "gp-icon-button gp-overlay-button", "⛶");
+    const overlay = makeElement("button", "goowi-icon-button goowi-overlay-button", "⛶");
     overlay.type = "button";
     const collapsedContext = selectionModeActive() ? "this page" : "Google";
     overlay.title = `Expand Wikipedia over ${collapsedContext}`;
@@ -1485,14 +1485,14 @@
 
     function setOverlay(expanded) {
       if (expanded) {
-        panel.classList.remove("gp-collapsed");
+        panel.classList.remove("goowi-collapsed");
         collapse.textContent = "›";
         collapse.title = "Collapse Wikipedia panel";
         collapse.setAttribute("aria-expanded", "true");
       }
 
-      panel.classList.toggle("gp-expanded", expanded);
-      document.documentElement.classList.toggle("googlepedia-reborn-overlay-open", expanded);
+      panel.classList.toggle("goowi-expanded", expanded);
+      document.documentElement.classList.toggle("goowi-overlay-open", expanded);
       overlay.textContent = expanded ? "⤡" : "⛶";
       overlay.title = expanded
         ? "Restore Wikipedia side panel"
@@ -1502,18 +1502,18 @@
     }
 
     overlay.addEventListener("click", () => {
-      setOverlay(!panel.classList.contains("gp-expanded"));
+      setOverlay(!panel.classList.contains("goowi-expanded"));
     });
 
-    const collapse = makeElement("button", "gp-icon-button", "›");
+    const collapse = makeElement("button", "goowi-icon-button", "›");
     collapse.type = "button";
     collapse.title = "Collapse Wikipedia panel";
     collapse.setAttribute("aria-expanded", "true");
     collapse.addEventListener("click", () => {
-      if (panel.classList.contains("gp-expanded")) {
+      if (panel.classList.contains("goowi-expanded")) {
         setOverlay(false);
       }
-      const collapsed = panel.classList.toggle("gp-collapsed");
+      const collapsed = panel.classList.toggle("goowi-collapsed");
       collapse.textContent = collapsed ? "‹" : "›";
       collapse.title = collapsed ? "Expand Wikipedia panel" : "Collapse Wikipedia panel";
       collapse.setAttribute("aria-expanded", collapsed ? "false" : "true");
@@ -1522,17 +1522,17 @@
     controls.append(race, random, refresh, overlay, collapse);
     toolbar.append(brandGroup, donate, controls);
 
-    const racebar = makeElement("div", "gp-racebar");
+    const racebar = makeElement("div", "goowi-racebar");
     racebar.hidden = true;
     racebar.setAttribute("aria-live", "polite");
 
-    const body = makeElement("div", "gp-body");
-    const loading = makeElement("div", "gp-loading", `Looking up “${query}”…`);
+    const body = makeElement("div", "goowi-body");
+    const loading = makeElement("div", "goowi-loading", `Looking up “${query}”…`);
     body.appendChild(loading);
 
     panel.append(toolbar, racebar, body);
     document.body.appendChild(panel);
-    document.documentElement.classList.add("googlepedia-reborn-visible");
+    document.documentElement.classList.add("goowi-visible");
     updateRaceUi(panel);
 
     return { panel, body };
@@ -1557,20 +1557,20 @@
     body.replaceChildren();
 
     if (!result?.found) {
-      const empty = makeElement("div", "gp-empty");
+      const empty = makeElement("div", "goowi-empty");
       empty.appendChild(makeElement("strong", "", "No Wikipedia match found."));
       empty.appendChild(makeElement("p", "", `Wikipedia did not return a likely article for “${query}”.`));
       if (result?.error) {
-        empty.appendChild(makeElement("p", "gp-error-detail", result.error));
+        empty.appendChild(makeElement("p", "goowi-error-detail", result.error));
       }
       body.appendChild(empty);
       return;
     }
 
     const raceActive = raceIsEngaged();
-    const header = makeElement("header", "gp-article-header");
+    const header = makeElement("header", "goowi-article-header");
     const title = raceActive ? document.createElement("span") : document.createElement("a");
-    title.className = "gp-title";
+    title.className = "goowi-title";
     title.textContent = result.title;
     if (!raceActive) {
       title.href = result.pageUrl;
@@ -1580,7 +1580,7 @@
     header.appendChild(title);
 
     if (result.description) {
-      header.appendChild(makeElement("div", "gp-description", result.description));
+      header.appendChild(makeElement("div", "goowi-description", result.description));
     }
 
     body.appendChild(header);
@@ -1598,14 +1598,14 @@
     const hatnotes = buildHatnotes(result.html, result.language, navigationOptions);
     if (hatnotes) body.appendChild(hatnotes);
 
-    const article = makeElement("article", "gp-article");
+    const article = makeElement("article", "goowi-article");
 
     // Use Wikipedia's designated representative image only. If Wikipedia does
     // not designate one for the page, leave the article image-free rather than
     // falling through to a secondary figure or interface icon.
     if (result.primaryImage) {
       const image = document.createElement("img");
-      image.className = "gp-article-image";
+      image.className = "goowi-article-image";
       image.src = result.primaryImage.startsWith("//") ? `https:${result.primaryImage}` : result.primaryImage;
       image.alt = result.pageImageName ? result.pageImageName.replace(/^File:/i, "") : "";
       article.appendChild(image);
@@ -1619,7 +1619,7 @@
     if (readable.childNodes.length) {
       article.appendChild(readable);
     } else {
-      const fallback = makeElement("p", "gp-paragraph");
+      const fallback = makeElement("p", "goowi-paragraph");
       if (result.excerpt) {
         const excerptDoc = new DOMParser().parseFromString(result.excerpt, "text/html");
         fallback.textContent = excerptDoc.body.textContent || result.excerpt;
@@ -1631,11 +1631,11 @@
 
     body.appendChild(article);
 
-    const footer = makeElement("footer", "gp-footer");
+    const footer = makeElement("footer", "goowi-footer");
     if (raceActive) {
       footer.appendChild(makeElement(
         "span",
-        "gp-race-hint",
+        "goowi-race-hint",
         "Wikirace mode: article links stay inside GooWi and count toward your race total."
       ));
     } else {
@@ -1651,9 +1651,9 @@
 
   function renderSelectionNotice(body, message, detail = "") {
     body.replaceChildren();
-    const empty = makeElement("div", "gp-empty");
+    const empty = makeElement("div", "goowi-empty");
     empty.appendChild(makeElement("strong", "", message));
-    if (detail) empty.appendChild(makeElement("p", "gp-error-detail", detail));
+    if (detail) empty.appendChild(makeElement("p", "goowi-error-detail", detail));
     body.appendChild(empty);
   }
 
@@ -1689,7 +1689,7 @@
 
     try {
       const result = await chrome.runtime.sendMessage({
-        type: "googlepedia:lookup",
+        type: "goowi:lookup",
         query,
         language: getLanguage(),
         googleContexts: [],
@@ -1730,7 +1730,7 @@
 
     try {
       const result = await chrome.runtime.sendMessage({
-        type: "googlepedia:random",
+        type: "goowi:random",
         language: getLanguage()
       });
 
@@ -1775,7 +1775,7 @@
     // extension should leave Google's page completely alone. A forced refresh
     // reuses the existing shell so expanded/collapsed state is preserved.
     const existingPanel = document.getElementById(PANEL_ID);
-    const existingBody = existingPanel?.querySelector(".gp-body");
+    const existingBody = existingPanel?.querySelector(".goowi-body");
 
     raceState = null;
     if (!force) {
@@ -1791,7 +1791,7 @@
       if (serial !== requestSerial || query !== getQuery()) return;
 
       const result = await chrome.runtime.sendMessage({
-        type: "googlepedia:lookup",
+        type: "goowi:lookup",
         query,
         language: getLanguage(),
         googleContexts,
@@ -1829,12 +1829,12 @@
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
     const panel = document.getElementById(PANEL_ID);
-    if (!panel?.classList.contains("gp-expanded")) return;
+    if (!panel?.classList.contains("goowi-expanded")) return;
 
-    panel.classList.remove("gp-expanded");
-    document.documentElement.classList.remove("googlepedia-reborn-overlay-open");
+    panel.classList.remove("goowi-expanded");
+    document.documentElement.classList.remove("goowi-overlay-open");
 
-    const overlay = panel.querySelector(".gp-overlay-button");
+    const overlay = panel.querySelector(".goowi-overlay-button");
     if (overlay) {
       overlay.textContent = "⛶";
       overlay.title = selectionModeActive() ? "Expand Wikipedia over this page" : "Expand Wikipedia over Google";
@@ -1866,7 +1866,7 @@
   }
 
   chrome.runtime.onMessage.addListener((message) => {
-    if (message?.type !== "googlepedia:view-selection") return undefined;
+    if (message?.type !== "goowi:view-selection") return undefined;
     loadForSelection(message.selection);
     return undefined;
   });

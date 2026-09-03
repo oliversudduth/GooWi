@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.1
+
+- Version synchronized with the Firefox v0.8.1 release.
+- Chromium's existing **View in GooWi** injection behavior is unchanged; it already functioned alongside the built-in PDF viewer in manual testing.
+- Preserved the v0.7.20 matcher and all v0.8.0 selection, donation, Wikirace, and reader behavior.
+- No new Chromium permissions or data categories were added.
+
 ## 0.8.0
 
 - Added **View in GooWi** to the browser context menu when text is selected.
