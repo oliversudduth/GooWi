@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "GooWi",
-  "version": "0.8.1",
+  "version": "1.0.0",
   "description": "Brings relevant Wikipedia beside Google Search and opens GooWi on selected text across the browser, including a Firefox sidebar fallback for protected readers such as the built-in PDF viewer.",
   "icons": {
     "16": "icons/icon-16.png",
