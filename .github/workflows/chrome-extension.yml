@@ -1,10 +1,10 @@
-name: Chrome extension validation
+name: Chromium extension validation
 
 on:
   push:
-    branches: [chrome-port]
+    branches: [chromium]
   pull_request:
-    branches: [chrome-port]
+    branches: [chromium]
   workflow_dispatch:
 
 jobs:
@@ -28,7 +28,7 @@ jobs:
           node --check background.js
           node --check content.js
 
-      - name: Validate Chrome Manifest V3
+      - name: Validate Chromium Manifest V3
         run: |
           node <<'NODE'
           const fs = require('fs');
@@ -49,11 +49,11 @@ jobs:
           }
 
           if (manifest.background && manifest.background.scripts) {
-            fail('background.scripts is Firefox-style and must not be present in the Chrome build');
+            fail('background.scripts is Firefox-style and must not be present in the Chromium build');
           }
 
           if (manifest.browser_specific_settings) {
-            fail('browser_specific_settings is Firefox-specific and must not be present in the Chrome build');
+            fail('browser_specific_settings is Firefox-specific and must not be present in the Chromium build');
           }
 
           if (!Array.isArray(manifest.host_permissions) ||
@@ -89,17 +89,17 @@ jobs:
           }
 
           if (!process.exitCode) {
-            console.log(`Chrome manifest validation passed for GooWi v${manifest.version}`);
+            console.log(`Chromium manifest validation passed for GooWi v${manifest.version}`);
           }
           NODE
 
-      - name: Ensure Chrome API namespace is used
+      - name: Ensure Chromium API namespace is used
         run: |
           if grep -n 'browser\.runtime' background.js content.js; then
-            echo "ERROR: Firefox browser.runtime namespace found in Chrome source."
+            echo "ERROR: Firefox browser.runtime namespace found in Chromium source."
             exit 1
           fi
-          echo "Chrome runtime namespace check passed."
+          echo "Chromium runtime namespace check passed."
 
       - name: Read extension version
         id: version
@@ -107,14 +107,22 @@ jobs:
           VERSION=$(node -p "require('./manifest.json').version")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Build Chrome package
+      - name: Build Chromium package
         run: |
-          mkdir -p chrome-artifacts
-          zip -r "chrome-artifacts/goowi-chrome-${{ steps.version.outputs.version }}.zip"             manifest.json             background.js             content.js             googlepedia.css             icons             LICENSE             NOTICE             PRIVACY.md
+          mkdir -p chromium-artifacts
+          zip -r "chromium-artifacts/goowi-chromium-${{ steps.version.outputs.version }}.zip" \
+            manifest.json \
+            background.js \
+            content.js \
+            goowi.css \
+            icons \
+            LICENSE \
+            NOTICE \
+            PRIVACY.md
 
-      - name: Upload Chrome package
+      - name: Upload Chromium package
         uses: actions/upload-artifact@v4
         with:
-          name: goowi-chrome-build
-          path: chrome-artifacts/*.zip
+          name: goowi-chromium-build
+          path: chromium-artifacts/*.zip
           if-no-files-found: error
