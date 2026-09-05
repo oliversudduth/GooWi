@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "GooWi",
-  "version": "1.0.0",
-  "description": "Adds relevant Wikipedia beside Google Search and opens GooWi on selected text anywhere in the browser, with reading mode, Random Article, and Wikirace.",
+  "version": "1.1.1",
+  "description": "Adds Wikipedia beside Google Search with View in GooWi, Back, History, reading mode, Random Article, Wikirace, and link lookup.",
   "minimum_chrome_version": "99",
   "icons": {
     "16": "icons/icon-16.png",

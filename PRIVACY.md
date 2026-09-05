@@ -1,8 +1,8 @@
 # GooWi Privacy Policy
 
-**Effective date:** August 30, 2026
+**Effective date:** September 4, 2026
 
-GooWi is a browser extension for Firefox and Chromium-based browsers, created and maintained by Oliver Sudduth. GooWi places relevant Wikipedia context beside Google Search results and, when the user explicitly chooses **View in GooWi**, can open the GooWi reader for selected text on an ordinary webpage. Wikipedia remains the encyclopedia source and destination for full articles.
+GooWi is a browser extension for Firefox and Chromium-based browsers, created and maintained by Oliver Sudduth. GooWi places relevant Wikipedia context beside Google Search results and, when the user explicitly chooses **View in GooWi**, can open the GooWi reader from selected text or a user-invoked link on an ordinary webpage. Wikipedia remains the encyclopedia source and destination for full articles.
 
 ## Short version
 
@@ -10,7 +10,7 @@ GooWi does **not** use analytics, advertising, telemetry, user accounts, persist
 
 The developer does **not** receive, sell, rent, profile, or retain users' Google search terms, browsing history, viewed Wikipedia articles, or Wikirace activity through GooWi.
 
-To provide its primary features, GooWi sends either the current Google search term or text the user explicitly selected with **View in GooWi** directly to the relevant Wikipedia language edition so Wikipedia can return matching encyclopedia content. When a user follows a Wikipedia article link inside GooWi, GooWi may also send the selected Wikipedia article title directly to Wikipedia to retrieve that article.
+To provide its primary features, GooWi sends either the current Google search term or a lookup the user explicitly invoked with **View in GooWi** from selected text or a link directly to the relevant Wikipedia language edition so Wikipedia can return matching encyclopedia content. When a user follows a Wikipedia article link inside GooWi, GooWi may also send the selected Wikipedia article title directly to Wikipedia to retrieve that article.
 
 These transmissions are necessary for GooWi's user-facing functionality.
 
@@ -22,18 +22,19 @@ Depending on which feature the user invokes, GooWi may read:
 - the requested or interface language when available (`hl`, the page language, or the browser language);
 - high-confidence Google Search result-page context, such as a prominent entity/topic heading and nearby explanatory text, when available;
 - text explicitly selected by the user when they invoke **View in GooWi**;
+- the visible label and destination URL of a link the user explicitly invokes with **View in GooWi**, used locally to derive a concise lookup term when possible;
 - Wikipedia article titles selected by the user while navigating inside GooWi, including during Wikirace.
 
 This information is used in memory to provide GooWi's features.
 
-GooWi does not maintain a browsing-history database and does not use browser storage to retain a history of Google searches, viewed Wikipedia articles, or Wikirace activity.
+GooWi does not maintain a browsing-history database and does not use browser storage to retain Google searches, viewed Wikipedia articles, or Wikirace activity. v1.1.1 keeps a limited article-navigation history only in the active page's memory so Back and History can work; that in-memory list is not persisted and is discarded when the GooWi session/page ends or its source context is replaced.
 
 ## Information transmitted to Wikipedia
 
 Depending on the feature being used, GooWi may send HTTPS requests directly to a Wikipedia domain containing:
 
 - the current Google search term, to find a relevant Wikipedia article;
-- text the user explicitly selected with **View in GooWi**, to find a relevant Wikipedia article;
+- text the user explicitly selected with **View in GooWi**, or a concise term derived locally from a user-invoked link label or destination, to find a relevant Wikipedia article;
 - an optional high-confidence canonical topic inferred locally from visible Google Search result-page context, used for a second Wikipedia candidate lookup when it can clarify the user's intended entity;
 - the same search term when requesting Wikipedia metadata for exact-title redirect resolution, redirect identity, and, when needed, spelling suggestions;
 - a Wikipedia article title selected by the user while navigating inside GooWi;
@@ -58,11 +59,11 @@ Navigating among Wikipedia article links inside GooWi does **not** change or res
 
 ## View in GooWi on ordinary webpages
 
-When the user highlights text and explicitly chooses **View in GooWi** from the browser context menu, GooWi receives the selected text and temporarily injects its packaged reader interface into that one active tab. GooWi does not continuously read arbitrary webpages in the background and does not request permanent `<all_urls>` host access.
+When the user explicitly chooses **View in GooWi** from the browser context menu on selected text or a link, GooWi receives the selected text and/or link information supplied by the browser and temporarily injects its packaged reader interface into that one active tab. Selected text takes precedence. For link-only invocations, GooWi prefers the human-visible link label when available and otherwise derives a concise term from the destination when possible. GooWi does not continuously read arbitrary webpages in the background and does not request permanent `<all_urls>` host access.
 
-Before a selected-text lookup, GooWi trims leading/trailing whitespace and collapses repeated whitespace. If the cleaned selection is longer than 75 characters, GooWi displays **“Sheesh, keep it brief 🫠”** and does not send that selection to Wikipedia.
+Before an explicit View in GooWi lookup, GooWi trims leading/trailing whitespace and collapses repeated whitespace. If the cleaned lookup is longer than 75 characters, GooWi displays **“Sheesh, keep it brief 🫠”** and does not send that selection to Wikipedia.
 
-For selections of 75 characters or fewer, GooWi sends the selected text directly to Wikipedia using the same conservative matching system used by the Google companion. If no sufficiently trustworthy match is found, GooWi leaves the explicitly opened reader visible and displays **“No confident Wikipedia match found.”**
+For lookups of 75 characters or fewer, GooWi sends the resulting lookup term directly to Wikipedia using the same conservative matching system used by the Google companion. If no sufficiently trustworthy match is found, GooWi leaves the explicitly opened reader visible and displays **“No confident Wikipedia match found.”**
 
 On non-Google pages, the extension uses `activeTab` and `scripting` only after the user invokes the context-menu command. Browser-protected or restricted pages may prevent injection; GooWi does not attempt to bypass those restrictions.
 
@@ -87,7 +88,7 @@ The only external transmission of search-related information performed by GooWi 
 GooWi requests only the access needed for its current functionality:
 
 - access to supported Google Search results pages, so GooWi can display its automatic companion interface and read the current query;
-- `contextMenus`, so **View in GooWi** appears when the user selects text;
+- `contextMenus`, so **View in GooWi** appears for selected text and links;
 - `activeTab`, so GooWi receives temporary access only to the tab where the user explicitly invokes **View in GooWi**;
 - `scripting`, so the packaged GooWi reader and stylesheet can be injected into that explicitly invoked tab;
 - access to Wikipedia domains, so GooWi can search for and retrieve Wikipedia content.
@@ -98,7 +99,7 @@ GooWi does not request access to browser history, cookies, stored passwords, aut
 
 On Firefox, GooWi supports Firefox 140 and later.
 
-Because GooWi transmits search text to Wikipedia to provide its core lookup features, the Firefox build declares the required transmitted data type **search terms** (`searchTerms`). Because GooWi may also transmit a canonical topic inferred from visible Google result-page context, or text the user explicitly selected from a webpage with **View in GooWi**, the Firefox build also declares **website content** (`websiteContent`). Firefox's built-in data-collection and transmission consent experience covers these required transmissions.
+Because GooWi transmits search text to Wikipedia to provide its core lookup features, the Firefox build declares the required transmitted data type **search terms** (`searchTerms`). Because GooWi may also transmit a canonical topic inferred from visible Google result-page context, or a lookup the user explicitly invoked from selected text or a link with **View in GooWi**, the Firefox build also declares **website content** (`websiteContent`). Firefox's built-in data-collection and transmission consent experience covers these required transmissions.
 
 A Firefox user who does not accept that required transmission can cancel installation.
 
@@ -107,7 +108,7 @@ A Firefox user who does not accept that required transmission can cancel install
 For the Chrome Web Store, GooWi conservatively discloses handling of:
 
 - **Web history**, because GooWi reads the current Google Search URL/query in order to provide its user-facing feature;
-- **Website content**, because GooWi reads and displays Wikipedia article text, images, links, titles, hatnotes, and related encyclopedia content; may locally read high-confidence Google result-page context to infer the intended topic; and receives text the user explicitly selects with **View in GooWi**.
+- **Website content**, because GooWi reads and displays Wikipedia article text, images, links, titles, hatnotes, and related encyclopedia content; may locally read high-confidence Google result-page context to infer the intended topic; and receives user-invoked selected text or link labels/destinations for **View in GooWi**.
 
 These disclosures do **not** mean that GooWi stores a browsing-history database or sends browsing history to the developer. GooWi does not retain a history of sites visited or searches performed.
 

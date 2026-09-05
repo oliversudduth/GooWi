@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.1.1
+
+- Moved the Wikimedia support heart into the normal toolbar control row as the leftmost icon.
+- Replaced the long text Back arrow with a compact browser-style SVG arrow while preserving the same **Previous article** behavior and accessibility label.
+- Improved **View in GooWi** for links with opaque or ID-based destinations: human-readable semantic labels are preferred over URL-derived tokens.
+- Complex links now rank concise nested headings, ARIA labels, titles, image alt text, and visible anchor text instead of trusting an oversized container label. This prevents short result titles from incorrectly triggering **“Sheesh, keep it brief 🫠”** when the underlying clickable anchor contains much more text.
+- Firefox and Chromium both use the existing user-invoked `activeTab` + `scripting` grant to inspect only the matching link locally; Firefox also retains its browser-supplied link text as a fallback candidate.
+- Selected text still takes precedence, candidate labels are never arbitrarily truncated, and the existing 75-character lookup limit and relevance matcher remain unchanged.
+- Link-only **View in GooWi** now retries conservative semantic candidates when an SEO-style visible headline has no confident Wikipedia match: the exact visible title is tried first, then a human-readable URL slug, then the title prefix before a spaced `-`, `|`, `–`, or `—` separator. The core matcher itself is not loosened.
+- No analytics, telemetry, persistent browsing history, new host permissions, or new developer data collection were added.
+
+## 1.1.0
+
+- Added session-local **Article History** and **Previous Article** controls to GooWi navigation.
+- Toolbar order is now Wikirace → Random → History → Back → Return → Expand → Collapse.
+- History is kept only in memory for the current GooWi session; it is not written to browser storage or sent to the developer.
+- Return keeps its original meaning: restore the source article for the underlying Google query or first selected-text session.
+- Article-history entries retain scroll position so Back/History can restore the prior reading location.
+- Fixed expanded-reader hatnotes so redirects, “Main article,” “For other uses,” and similar notes align with the centered article column.
+- Internal Wikipedia links now carry truthful Google-search destinations for their own article titles. Plain left-click still navigates inside GooWi, while modifier-clicks and browser **Open Link in New Tab** behavior use the linked term rather than the original Google query.
+- **View in GooWi** now appears for links as well as text selections. Explicit selected text takes precedence; otherwise GooWi derives a concise lookup term from the link destination when possible.
+- Preserved the v1.0.0 relevance matcher, Wikirace rules, Random Article behavior, protected-reader handling, and existing permission model.
+- No analytics, telemetry, accounts, developer backend, persistent history, or new host permissions were added.
+
 ## 1.0.0
 
 - First stable general-public release of GooWi.
