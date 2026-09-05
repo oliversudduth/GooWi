@@ -107,6 +107,108 @@
   font-size: 20px;
 }
 
+
+.goowi-history-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.goowi-history-button {
+  font-size: 18px;
+}
+
+.goowi-back-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.goowi-back-icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.goowi-history-menu {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 7px);
+  right: 0;
+  width: min(280px, calc(100vw - 32px));
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--goowi-line);
+  border-radius: 10px;
+  background: var(--goowi-bg);
+  box-shadow: 0 8px 24px rgba(60, 64, 67, 0.22);
+}
+
+.goowi-history-menu[hidden] {
+  display: none !important;
+}
+
+.goowi-history-item {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--goowi-fg);
+  font: 13px/1.35 Arial, Helvetica, sans-serif;
+  text-align: left;
+  cursor: pointer;
+}
+
+.goowi-history-item:hover,
+.goowi-history-item:focus-visible {
+  background: #e8eaed;
+  outline: none;
+}
+
+.goowi-history-current {
+  font-weight: 600;
+}
+
+.goowi-history-marker {
+  color: var(--goowi-muted);
+  text-align: center;
+}
+
+.goowi-history-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.goowi-history-empty {
+  padding: 8px 9px;
+  color: var(--goowi-muted);
+  font-size: 12px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .goowi-history-menu {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.38);
+  }
+
+  .goowi-history-item:hover,
+  .goowi-history-item:focus-visible {
+    background: #3c4043;
+  }
+}
+
 .goowi-body {
   min-height: 0;
   overflow-y: auto;
@@ -306,14 +408,22 @@
   }
 
   .goowi-controls {
-    gap: 1px;
+    gap: 0;
+  }
+
+  .goowi-brand-via {
+    display: none;
   }
 
   .goowi-icon-button {
-    width: 27px;
-    height: 27px;
-    font-size: 18px;
-    line-height: 27px;
+    width: 25px;
+    height: 25px;
+    font-size: 17px;
+    line-height: 25px;
+  }
+
+  .goowi-history-button {
+    font-size: 15px;
   }
 
   .goowi-body {
@@ -356,6 +466,7 @@
 
 #goowi-panel.goowi-collapsed .goowi-brand-group,
 #goowi-panel.goowi-collapsed .goowi-body,
+#goowi-panel.goowi-collapsed .goowi-history-control,
 #goowi-panel.goowi-collapsed .goowi-icon-button:not(:last-child) {
   display: none;
 }
@@ -396,6 +507,7 @@ html.goowi-overlay-open {
 }
 
 #goowi-panel.goowi-expanded .goowi-article-header,
+#goowi-panel.goowi-expanded .goowi-hatnotes,
 #goowi-panel.goowi-expanded .goowi-article,
 #goowi-panel.goowi-expanded .goowi-footer {
   width: min(100%, 1100px);
@@ -529,24 +641,17 @@ html.goowi-overlay-open {
   font-size: 20px;
 }
 
-/* v0.8.0: Wikimedia support link sits independently at the true center of
-   the reader toolbar, separate from GooWi's article/navigation controls. */
+/* v1.1.1: the Wikimedia support heart joins GooWi's functional controls
+   as the leftmost toolbar icon. Keeping it in the same flex row preserves
+   spacing now that History and Back have expanded the navigation group. */
 #goowi-panel {
   container-type: inline-size;
 }
 
-#goowi-panel .goowi-toolbar {
-  position: relative;
-}
-
 #goowi-panel .goowi-donate-button {
-  position: absolute;
-  top: 50%;
-  left: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transform: translate(-50%, -50%);
   color: var(--goowi-muted) !important;
   font-family: Arial, Helvetica, sans-serif;
   font-size: 23px;
@@ -559,16 +664,29 @@ html.goowi-overlay-open {
   text-decoration: none !important;
 }
 
-#goowi-panel.goowi-collapsed .goowi-donate-button {
-  display: none;
-}
-
-/* At unusually narrow side-pane widths the centered control would collide
-   with the right-hand five-button group. Hide it only for that constrained
-   presentation; it returns automatically as soon as the pane has room. */
-@container (max-width: 400px) {
-  #goowi-panel .goowi-donate-button {
+@container (max-width: 430px) {
+  #goowi-panel .goowi-brand-via {
     display: none;
+  }
+
+  #goowi-panel .goowi-controls {
+    gap: 1px;
+  }
+
+  #goowi-panel .goowi-icon-button {
+    width: 27px;
+    height: 27px;
+    line-height: 27px;
+    font-size: 18px;
+  }
+
+  #goowi-panel .goowi-history-button {
+    font-size: 16px;
+  }
+
+  #goowi-panel .goowi-back-icon {
+    width: 16px;
+    height: 16px;
   }
 }
 
@@ -636,14 +754,27 @@ html[data-goowi-surface="native-sidebar"] #goowi-panel .goowi-brand-via {
 }
 
 html[data-goowi-surface="native-sidebar"] #goowi-panel .goowi-controls {
-  gap: 1px;
+  gap: 0;
+}
+
+html[data-goowi-surface="native-sidebar"] #goowi-panel .goowi-brand-via {
+  display: none;
 }
 
 html[data-goowi-surface="native-sidebar"] #goowi-panel .goowi-icon-button {
-  width: 27px;
-  height: 27px;
-  font-size: 18px;
-  line-height: 27px;
+  width: 25px;
+  height: 25px;
+  font-size: 17px;
+  line-height: 25px;
+}
+
+html[data-goowi-surface="native-sidebar"] #goowi-panel .goowi-history-button {
+  font-size: 15px;
+}
+
+html[data-goowi-surface="native-sidebar"] #goowi-panel .goowi-back-icon {
+  width: 16px;
+  height: 16px;
 }
 
 html[data-goowi-surface="native-sidebar"] #goowi-panel .goowi-body {
@@ -665,26 +796,12 @@ html[data-goowi-surface="native-sidebar"] #goowi-panel .goowi-article-image {
   margin-left: 12px;
 }
 
-/* The compact native-toolbar geometry leaves enough room for the centered
-   heart at ordinary sidebar widths. Hide it only if the sidebar is extremely
-   narrow. */
-@container (min-width: 311px) {
-  html[data-goowi-surface="native-sidebar"] #goowi-panel .goowi-donate-button {
-    display: inline-flex;
-  }
-}
-
-@container (max-width: 310px) {
-  html[data-goowi-surface="native-sidebar"] #goowi-panel .goowi-donate-button {
-    display: none;
-  }
-}
-
 html[data-goowi-surface="reader-tab"] #goowi-panel .goowi-body {
   padding: 30px 48px 44px;
 }
 
 html[data-goowi-surface="reader-tab"] #goowi-panel .goowi-article-header,
+html[data-goowi-surface="reader-tab"] #goowi-panel .goowi-hatnotes,
 html[data-goowi-surface="reader-tab"] #goowi-panel .goowi-article,
 html[data-goowi-surface="reader-tab"] #goowi-panel .goowi-footer {
   width: min(100%, 1100px);

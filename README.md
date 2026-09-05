@@ -1,15 +1,15 @@
 # GooWi
 
-**Wikipedia context beside Google Search — and on demand from selected text anywhere on the web.**
+**Wikipedia context beside Google Search — with session navigation and on-demand lookup from selected text or links.**
 
-GooWi is an independent, open-source browser extension created by **Oliver Sudduth**. It places a concise, contextually relevant Wikipedia companion beside Google Search results and can also open the full GooWi reader for text selected on ordinary webpages. Wikipedia remains the encyclopedia source and destination for full articles.
+GooWi is an independent, open-source browser extension created by **Oliver Sudduth**. It places a concise, contextually relevant Wikipedia companion beside Google Search results and can also open the full GooWi reader from selected text or useful link targets on ordinary webpages. Wikipedia remains the encyclopedia source and destination for full articles.
 
 GooWi follows a simple rule:
 
 > **Show a useful Wikipedia companion when there is a sufficiently relevant match; otherwise stay out of the way.**
 
 
-> **v1.0.0** is the first stable public release. It promotes the fully tested v0.8.1 codebase without changing extension behavior.
+> **v1.1.1** refines the v1.1 navigation release with a compact Back icon, a left-aligned toolbar heart, and smarter **View in GooWi** link-label lookup for opaque/ID-based URLs while preserving the v1.0.0 matcher.
 
 ## Why GooWi exists
 
@@ -18,12 +18,13 @@ Search engines are often excellent at prioritizing official, transactional, loca
 ## Features
 
 - Relevant Wikipedia previews beside Google Search results
-- **View in GooWi** context-menu lookup for selected words and phrases
+- **View in GooWi** context-menu lookup for selected words/phrases and useful link targets
   - ordinary webpages use the familiar injected GooWi sidebar
   - Firefox's built-in PDF viewer and compatible protected reader surfaces use a native Firefox sidebar fallback
   - full GooWi reader injected only after explicit user invocation
   - 75-character cleaned-selection limit
   - selections over the limit show **“Sheesh, keep it brief 🫠”** without contacting Wikipedia
+  - link-only lookups retry conservative SEO-title fallbacks (exact visible title → readable URL slug → title prefix before a spaced separator) without weakening GooWi's relevance matcher
   - explicit lookups with no trustworthy result show **“No confident Wikipedia match found.”**
 - Conservative relevance filtering that favors silence over misleading matches
 - Optional high-confidence Google-context-assisted matching
@@ -32,6 +33,8 @@ Search engines are often excellent at prioritizing official, transactional, loca
 - Wikipedia hatnotes and clarification links
 - Wikipedia PageImages representative-image support
 - Internal Wikipedia navigation that leaves the underlying Google query unchanged
+- Session-local **History** menu and **Back** navigation with reading-position restoration
+- Linked terms retain their own Google-search destination for browser new-tab/modifier-click behavior
 - Random Article
 - Expand/restore reading overlay
 - Wikirace with full supported article navigation
@@ -41,7 +44,7 @@ Search engines are often excellent at prioritizing official, transactional, loca
   - unlimited overtime when Continue is chosen
 - Responsive full-width and half-screen desktop layouts
 - Light/dark appearance support
-- Centered **♡ Donate to Wikimedia** toolbar link opening `https://donate.wikimedia.org` in a new tab
+- **♡ Donate to Wikimedia** as the leftmost toolbar icon, opening `https://donate.wikimedia.org` in a new tab
 
 ## Product philosophy
 
@@ -53,7 +56,7 @@ Normal mode deliberately presents a condensed preview. A link at the end sends t
 
 GooWi has no analytics, ads, telemetry, accounts, persistent identifiers, or developer-operated backend service.
 
-To provide its primary features, GooWi sends the current Google search term—or text the user explicitly selects with **View in GooWi**—directly to Wikipedia. When a high-confidence Google entity/topic interpretation is visible, GooWi may also use that context locally and send the inferred canonical topic directly to Wikipedia for an additional candidate lookup.
+To provide its primary features, GooWi sends the current Google search term—or a lookup the user explicitly invokes with **View in GooWi** from selected text or a link—directly to Wikipedia. When a high-confidence Google entity/topic interpretation is visible, GooWi may also use that context locally and send the inferred canonical topic directly to Wikipedia for an additional candidate lookup.
 
 The developer does not receive or retain users' search terms or selected-text lookups through GooWi.
 
@@ -65,11 +68,9 @@ GooWi runs automatically only on supported Google Search result pages. For **Vie
 
 ## Project status
 
-The current stable release is **v1.0.0**.
+The current release is **v1.1.1**. It builds on v1.1.0's session-local History and Back navigation with toolbar polish and a more robust **View in GooWi** link resolver. Link-only lookups now prefer concise semantic labels and can conservatively retry readable URL slugs or SEO-title prefixes without weakening GooWi's established relevance matcher.
 
-v0.8.1 retains the v0.8.0 browser-wide **View in GooWi** and centered **♡ Donate to Wikimedia** features, and adds a native Firefox sidebar fallback for the built-in PDF viewer and other compatible protected reader surfaces where Firefox allows selected-text context-menu actions but blocks ordinary extension injection. The v0.7.20 matcher remains unchanged.
-
-Firefox and Chrome builds are maintained and validated independently before store release.
+Firefox and Chromium builds are maintained and validated as separate browser targets where their APIs differ. Chrome and Edge use the same Chromium package whenever their code is identical; separate packages are produced only if the browser builds diverge.
 
 ## Authorship and license
 

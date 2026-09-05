@@ -1379,13 +1379,210 @@ function cleanContextSelection(value) {
   return String(value || "").replace(/\s+/g, " ").trim().slice(0, 2000);
 }
 
+
+function contextQueryFromLinkUrl(value) {
+  try {
+    const url = new URL(String(value || ""));
+    const host = url.hostname.toLowerCase();
+
+    if ((host === "google.com" || host === "www.google.com") && url.pathname === "/search") {
+      return cleanContextSelection(url.searchParams.get("q") || "");
+    }
+
+    if ((host === "google.com" || host === "www.google.com") && url.pathname === "/url") {
+      const target = url.searchParams.get("q") || url.searchParams.get("url") || "";
+      if (target) return contextQueryFromLinkUrl(target);
+    }
+
+    const wikiMatch = url.pathname.match(/^\/wiki\/(.+)$/);
+    if (wikiMatch && /(?:^|\.)(?:wikipedia|wiktionary)\.org$/.test(host)) {
+      return cleanContextSelection(
+        decodeURIComponent(wikiMatch[1]).replace(/_/g, " ").split("#")[0]
+      );
+    }
+
+    const parts = url.pathname.split("/").filter(Boolean);
+    if (!parts.length) return "";
+    const rawCandidate = decodeURIComponent(parts[parts.length - 1]).trim();
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawCandidate)) return "";
+    let candidate = rawCandidate
+      .replace(/\.(?:html?|php|aspx?)$/i, "")
+      .replace(/[-_]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (!candidate || /^\d+$/.test(candidate)) return "";
+    if (/^(?:index|home|default|search|article|page)$/i.test(candidate)) return "";
+    return cleanContextSelection(candidate);
+  } catch {
+    return "";
+  }
+}
+
+const MAX_CONTEXT_LINK_LABEL_LENGTH = 75;
+
+function contextQueryFromLinkText(value, linkUrl = "") {
+  const candidate = cleanContextSelection(value);
+  if (!candidate) return "";
+  if (linkUrl && candidate === cleanContextSelection(linkUrl)) return "";
+  if (/^(?:https?|ftp):\/\//i.test(candidate)) return "";
+  if (/^(?:click here|read more|learn more|more|here|link)$/i.test(candidate)) return "";
+  return candidate;
+}
+
+function contextTitleFallbackCandidates(value, linkUrl = "") {
+  const title = contextQueryFromLinkText(value, linkUrl);
+  if (!title) return [];
+
+  const fallbacks = [];
+  const separatorMatch = title.match(/^(.+?)\s(?:\||-|–|—)\s.+$/u);
+  if (separatorMatch) {
+    const prefix = contextQueryFromLinkText(separatorMatch[1], linkUrl);
+    if (prefix && Array.from(prefix).length >= 2) fallbacks.push(prefix);
+  }
+
+  return fallbacks;
+}
+
+function addContextLookupCandidate(list, value, linkUrl = "") {
+  const candidate = contextQueryFromLinkText(value, linkUrl);
+  if (!candidate || Array.from(candidate).length > MAX_CONTEXT_LINK_LABEL_LENGTH) return;
+
+  const key = candidate.toLocaleLowerCase();
+  if (list.some((item) => item.toLocaleLowerCase() === key)) return;
+  list.push(candidate);
+}
+
+function chooseContextLinkLabel(candidates, linkUrl = "") {
+  const sourceWeights = {
+    heading: 100,
+    roleHeading: 96,
+    ariaLabel: 92,
+    title: 88,
+    imageAlt: 84,
+    visibleText: 76,
+    textContent: 70,
+    browserLinkText: 68
+  };
+
+  const seen = new Set();
+  const usable = [];
+
+  for (const raw of candidates || []) {
+    const text = contextQueryFromLinkText(raw?.text, linkUrl);
+    if (!text || Array.from(text).length > MAX_CONTEXT_LINK_LABEL_LENGTH) continue;
+
+    const key = text.toLocaleLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const source = String(raw?.source || "visibleText");
+    const base = sourceWeights[source] || 60;
+    const wordCount = text.split(/\s+/).filter(Boolean).length;
+    const alphaCount = (text.match(/[\p{L}\p{N}]/gu) || []).length;
+    if (!alphaCount) continue;
+
+    let score = base;
+    if (wordCount >= 2 && wordCount <= 10) score += 7;
+    if (Array.from(text).length >= 3 && Array.from(text).length <= 60) score += 4;
+    if (/^[\p{L}\p{N}][\p{L}\p{N} '&’.,:;!?()\-–—]+$/u.test(text)) score += 2;
+
+    usable.push({ text, score, length: Array.from(text).length });
+  }
+
+  usable.sort((a, b) => b.score - a.score || a.length - b.length || a.text.localeCompare(b.text));
+  return usable[0]?.text || "";
+}
+
+async function executeContextLabelProbe(tabId, frameId, linkUrl) {
+  if (!tabId || !linkUrl) return [];
+
+  const target = { tabId };
+  if (Number.isInteger(frameId) && frameId >= 0) target.frameIds = [frameId];
+
+  try {
+    const results = await browser.scripting.executeScript({
+      target,
+      func: (expectedHref) => {
+        const squash = (value) => String(value || "").replace(/\s+/g, " ").trim();
+        const normalizeHref = (value) => {
+          try {
+            return new URL(String(value || ""), document.baseURI).href;
+          } catch {
+            return String(value || "");
+          }
+        };
+        const add = (list, source, value) => {
+          const text = squash(value);
+          if (text) list.push({ source, text });
+        };
+
+        const wanted = normalizeHref(expectedHref);
+        const anchors = Array.from(document.querySelectorAll("a[href]"));
+        const matches = anchors.filter((anchor) => normalizeHref(anchor.href) === wanted);
+        const candidates = [];
+
+        for (const anchor of matches.slice(0, 12)) {
+          for (const heading of anchor.querySelectorAll("h1,h2,h3,h4,h5,h6")) {
+            add(candidates, "heading", heading.innerText || heading.textContent);
+          }
+          for (const heading of anchor.querySelectorAll('[role="heading"]')) {
+            add(candidates, "roleHeading", heading.innerText || heading.textContent);
+          }
+          add(candidates, "ariaLabel", anchor.getAttribute("aria-label"));
+          add(candidates, "title", anchor.getAttribute("title"));
+          for (const image of anchor.querySelectorAll("img[alt]")) {
+            add(candidates, "imageAlt", image.getAttribute("alt"));
+          }
+          add(candidates, "visibleText", anchor.innerText);
+          add(candidates, "textContent", anchor.textContent);
+        }
+
+        return candidates.slice(0, 60);
+      },
+      args: [linkUrl]
+    });
+
+    return Array.isArray(results?.[0]?.result) ? results[0].result : [];
+  } catch {
+    return [];
+  }
+}
+
+async function contextQueriesFromInfo(info, tabId) {
+  const selection = cleanContextSelection(info?.selectionText);
+  if (selection) return [selection];
+
+  // Complex links can expose an oversized browser linkText even when the user
+  // sees a concise title. After the explicit context-menu action, inspect only
+  // the clicked page/frame and rank semantic labels such as nested headings,
+  // aria-labels, titles, image alt text, and visible anchor text. Firefox's own
+  // linkText remains a fallback candidate, not an unquestioned source.
+  const candidates = await executeContextLabelProbe(tabId, info?.frameId, info?.linkUrl);
+  candidates.push({ source: "browserLinkText", text: info?.linkText || "" });
+
+  const label = chooseContextLinkLabel(candidates, info?.linkUrl);
+  const queries = [];
+
+  // Preserve the visible link title as the first attempt. If the normal
+  // relevance matcher rejects an SEO-style headline, the reader can retry the
+  // human-readable URL slug and then a conservative title-prefix fallback.
+  addContextLookupCandidate(queries, label, info?.linkUrl);
+  addContextLookupCandidate(queries, contextQueryFromLinkUrl(info?.linkUrl), info?.linkUrl);
+  for (const fallback of contextTitleFallbackCandidates(label, info?.linkUrl)) {
+    addContextLookupCandidate(queries, fallback, info?.linkUrl);
+  }
+
+  return queries;
+}
+
 async function installSelectionContextMenu() {
   try {
     await browser.contextMenus.removeAll();
     browser.contextMenus.create({
       id: GOOWI_SELECTION_MENU_ID,
       title: "View in GooWi",
-      contexts: ["selection"]
+      contexts: ["selection", "link"]
     });
   } catch {
     // Context menus may be unavailable on some browser-controlled surfaces.
@@ -1413,9 +1610,10 @@ function isLikelyProtectedReaderSurface(info, tab) {
   });
 }
 
-async function openNativeSidebar(selection, tabId) {
+async function openNativeSidebar(selection, tabId, selectionCandidates = []) {
   pendingNativeSidebarSelection = {
     selection,
+    selectionCandidates,
     tabId,
     updatedAt: Date.now()
   };
@@ -1432,6 +1630,7 @@ async function openNativeSidebar(selection, tabId) {
     await browser.runtime.sendMessage({
       type: "goowi:native-sidebar-selection",
       selection,
+      selectionCandidates,
       tabId
     });
   } catch {
@@ -1441,10 +1640,11 @@ async function openNativeSidebar(selection, tabId) {
   return true;
 }
 
-async function showSelectionInTab(tabId, selection, info, tab) {
+async function showSelectionInTab(tabId, selection, selectionCandidates, info, tab) {
   const message = {
     type: "goowi:view-selection",
-    selection
+    selection,
+    selectionCandidates
   };
 
   // Firefox's PDF.js viewer, Reader View, AMO, and other privileged surfaces
@@ -1453,7 +1653,7 @@ async function showSelectionInTab(tabId, selection, info, tab) {
   // be one of those cases so sidebarAction.open() remains directly tied to the
   // user's context-menu action.
   if (isLikelyProtectedReaderSurface(info, tab)) {
-    await openNativeSidebar(selection, tabId);
+    await openNativeSidebar(selection, tabId, selectionCandidates);
     return;
   }
 
@@ -1477,17 +1677,18 @@ async function showSelectionInTab(tabId, selection, info, tab) {
     await browser.tabs.sendMessage(tabId, message);
   } catch {
     // Fall back to the extension-owned Firefox sidebar if injection is refused.
-    await openNativeSidebar(selection, tabId);
+    await openNativeSidebar(selection, tabId, selectionCandidates);
   }
 }
 
 browser.runtime.onInstalled.addListener(installSelectionContextMenu);
 browser.runtime.onStartup.addListener(installSelectionContextMenu);
-browser.contextMenus.onClicked.addListener((info, tab) => {
+browser.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info?.menuItemId !== GOOWI_SELECTION_MENU_ID || !tab?.id) return;
-  const selection = cleanContextSelection(info.selectionText);
+  const selectionCandidates = await contextQueriesFromInfo(info, tab.id);
+  const selection = selectionCandidates[0] || "";
   if (!selection) return;
-  showSelectionInTab(tab.id, selection, info, tab);
+  showSelectionInTab(tab.id, selection, selectionCandidates, info, tab);
 });
 
 browser.runtime.onMessage.addListener((message, sender) => {

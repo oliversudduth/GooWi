@@ -22,11 +22,14 @@
   const DISAMBIG_MAX_LISTS = 40;
   const DISAMBIG_MAX_LIST_ITEMS = 240;
   const RACE_MAX_CLICKS = 10;
+  const MAX_HISTORY_ENTRIES = 25;
   let lastQuery = null;
   let requestSerial = 0;
   let currentResult = null;
   let raceState = null;
   let selectionSession = null;
+  let articleHistory = [];
+  let historyIndex = -1;
 
   function isGoogleSearchPage() {
     const host = location.hostname.toLowerCase();
@@ -55,6 +58,22 @@
     return Array.from(String(value || "")).length;
   }
 
+  function normalizeSelectionCandidates(primary, candidates) {
+    const output = [];
+    const seen = new Set();
+
+    for (const raw of [primary, ...(Array.isArray(candidates) ? candidates : [])]) {
+      const candidate = cleanSelectionText(raw);
+      if (!candidate) continue;
+      const key = candidate.toLocaleLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      output.push(candidate);
+    }
+
+    return output;
+  }
+
   function activeLookupQuery() {
     return selectionSession?.active ? selectionSession.currentQuery : getQuery();
   }
@@ -70,6 +89,76 @@
 
   function selectionModeActive() {
     return Boolean(selectionSession?.active);
+  }
+
+
+  function resetArticleHistory() {
+    articleHistory = [];
+    historyIndex = -1;
+    updateHistoryUi();
+  }
+
+  function saveCurrentHistoryScroll(body) {
+    if (historyIndex < 0 || historyIndex >= articleHistory.length) return;
+    const entry = articleHistory[historyIndex];
+    if (!entry) return;
+    const scrollTop = Number(body?.scrollTop);
+    if (Number.isFinite(scrollTop) && scrollTop >= 0) entry.scrollTop = scrollTop;
+  }
+
+  function sameHistoryArticle(left, right) {
+    if (!left?.found || !right?.found) return false;
+    return normalizeRaceTitle(left.title) === normalizeRaceTitle(right.title) &&
+      String(left.language || "") === String(right.language || "");
+  }
+
+  function seedArticleHistory(result, query) {
+    if (!result?.found) {
+      resetArticleHistory();
+      return;
+    }
+    articleHistory = [{ result, query, scrollTop: 0 }];
+    historyIndex = 0;
+    updateHistoryUi();
+  }
+
+  function pushArticleHistory(result, query, body = null) {
+    if (!result?.found) return;
+    if (body) saveCurrentHistoryScroll(body);
+
+    if (historyIndex >= 0 && historyIndex < articleHistory.length) {
+      const current = articleHistory[historyIndex];
+      if (sameHistoryArticle(current?.result, result)) {
+        current.result = result;
+        current.query = query;
+        current.scrollTop = 0;
+        updateHistoryUi();
+        return;
+      }
+    }
+
+    if (historyIndex < articleHistory.length - 1) {
+      articleHistory = articleHistory.slice(0, historyIndex + 1);
+    }
+
+    articleHistory.push({ result, query, scrollTop: 0 });
+    if (articleHistory.length > MAX_HISTORY_ENTRIES) {
+      // Keep the source article at index 0 so Return always preserves its
+      // original meaning even in a long browsing session.
+      articleHistory.splice(1, 1);
+    }
+    historyIndex = articleHistory.length - 1;
+    updateHistoryUi();
+  }
+
+  function replaceHistoryEntry(index, result, query) {
+    if (!result?.found || index < 0 || index >= articleHistory.length) return;
+    articleHistory[index] = {
+      result,
+      query,
+      scrollTop: articleHistory[index]?.scrollTop || 0
+    };
+    updateHistoryUi();
   }
 
   const GOOGLE_GENERIC_HEADINGS = new Set([
@@ -920,10 +1009,11 @@
         // Google query must remain untouched; the return-to-query control restores
         // the article associated with that Google search at any time.
         const a = document.createElement("a");
-        a.href = "#";
+        a.href = googleSearchUrl(title);
         a.title = `Open ${title} in GooWi`;
         a.dataset.wikiTitle = title;
         a.addEventListener("click", (event) => {
+          if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
           event.preventDefault();
           options.onWikiNavigate?.(title);
         });
@@ -1171,6 +1261,105 @@
     return raceState && ["active", "paused"].includes(raceState.status);
   }
 
+
+  function closeHistoryMenu(panel = document.getElementById(PANEL_ID)) {
+    const menu = panel?.querySelector(".goowi-history-menu");
+    const button = panel?.querySelector(".goowi-history-button");
+    if (menu) menu.hidden = true;
+    if (button) button.setAttribute("aria-expanded", "false");
+  }
+
+  function renderHistoryMenu(panel = document.getElementById(PANEL_ID)) {
+    const menu = panel?.querySelector(".goowi-history-menu");
+    if (!menu) return;
+    menu.replaceChildren();
+
+    for (let index = articleHistory.length - 1; index >= 0; index -= 1) {
+      const entry = articleHistory[index];
+      if (!entry?.result?.found) continue;
+
+      const item = makeElement("button", "goowi-history-item");
+      item.type = "button";
+      item.setAttribute("role", "menuitem");
+      item.title = `Open ${entry.result.title}`;
+      if (index === historyIndex) {
+        item.classList.add("goowi-history-current");
+        item.setAttribute("aria-current", "page");
+      }
+
+      const marker = makeElement("span", "goowi-history-marker", index === historyIndex ? "•" : "");
+      const label = makeElement("span", "goowi-history-label", entry.result.title);
+      item.append(marker, label);
+      item.addEventListener("click", () => navigateToHistoryIndex(index));
+      menu.appendChild(item);
+    }
+
+    if (!menu.childElementCount) {
+      const empty = makeElement("div", "goowi-history-empty", "No article history yet.");
+      menu.appendChild(empty);
+    }
+  }
+
+  function updateHistoryUi(panel = document.getElementById(PANEL_ID)) {
+    if (!panel?.isConnected) return;
+    const historyButton = panel.querySelector(".goowi-history-button");
+    const backButton = panel.querySelector(".goowi-back-button");
+    const locked = Boolean(raceIsEngaged());
+
+    if (historyButton) {
+      historyButton.disabled = locked || articleHistory.length < 2;
+      historyButton.title = locked ? "Article history is unavailable during Wikirace" : "Article history";
+      historyButton.setAttribute("aria-label", historyButton.title);
+      if (historyButton.disabled) closeHistoryMenu(panel);
+    }
+
+    if (backButton) {
+      backButton.disabled = locked || historyIndex <= 0;
+      backButton.title = locked ? "Previous article is unavailable during Wikirace" : "Previous article";
+      backButton.setAttribute("aria-label", backButton.title);
+    }
+
+    const menu = panel.querySelector(".goowi-history-menu");
+    if (menu && !menu.hidden) renderHistoryMenu(panel);
+  }
+
+  function navigateToHistoryIndex(targetIndex) {
+    const panel = document.getElementById(PANEL_ID);
+    const body = panel?.querySelector(".goowi-body");
+    if (!panel?.isConnected || !body || raceIsEngaged()) return;
+    if (targetIndex < 0 || targetIndex >= articleHistory.length || targetIndex === historyIndex) {
+      closeHistoryMenu(panel);
+      return;
+    }
+
+    saveCurrentHistoryScroll(body);
+    const entry = articleHistory[targetIndex];
+    if (!entry?.result?.found) return;
+
+    raceState = null;
+    historyIndex = targetIndex;
+    currentResult = entry.result;
+    if (selectionSession?.active) selectionSession.currentQuery = entry.query;
+    renderResult(body, currentResult, entry.query || activeLookupQuery());
+    updateRaceUi(panel);
+    updateHistoryUi(panel);
+    body.scrollTop = Number(entry.scrollTop || 0);
+    closeHistoryMenu(panel);
+  }
+
+  function goBackArticle() {
+    if (historyIndex <= 0) return;
+    navigateToHistoryIndex(historyIndex - 1);
+  }
+
+  function syncRaceLandingToHistory() {
+    if (!currentResult?.found) return;
+    const current = articleHistory[historyIndex]?.result;
+    if (!sameHistoryArticle(current, currentResult)) {
+      pushArticleHistory(currentResult, activeLookupQuery());
+    }
+  }
+
   function updateRaceUi(panel) {
     if (!panel?.isConnected) return;
 
@@ -1179,6 +1368,7 @@
     const randomButton = panel.querySelector(".goowi-random-button");
     if (!bar || !raceButton || !randomButton) return;
 
+    updateHistoryUi(panel);
     bar.replaceChildren();
 
     if (!raceState) {
@@ -1249,7 +1439,9 @@
   }
 
   function cancelWikirace(panel) {
+    const wasEngaged = Boolean(raceState);
     raceState = null;
+    if (wasEngaged) syncRaceLandingToHistory();
     panel?.classList.remove("goowi-race-loading");
     const body = panel?.querySelector(".goowi-body");
     if (body && currentResult?.found) {
@@ -1261,6 +1453,10 @@
   async function startWikirace(panel, body, query) {
     if (!panel?.isConnected || !body || !currentResult?.found) return;
 
+    if (sameHistoryArticle(articleHistory[historyIndex]?.result, currentResult)) {
+      saveCurrentHistoryScroll(body);
+    }
+    closeHistoryMenu(panel);
     const raceButton = panel.querySelector(".goowi-race-button");
     if (raceButton) {
       raceButton.disabled = true;
@@ -1315,6 +1511,7 @@
       return;
     }
 
+    saveCurrentHistoryScroll(body);
     const serial = ++requestSerial;
     const query = activeLookupQuery();
 
@@ -1334,6 +1531,7 @@
       if (!result?.found) return;
 
       currentResult = result;
+      pushArticleHistory(result, query);
       renderResult(body, currentResult, query);
       updateRaceUi(panel);
       body.scrollTop = 0;
@@ -1380,6 +1578,7 @@
 
       if (normalizeRaceTitle(result.title) === normalizeRaceTitle(state.targetTitle)) {
         state.status = "won";
+        syncRaceLandingToHistory();
       } else if (!state.extended && state.clicksUsed >= state.maxClicks) {
         state.status = "paused";
       }
@@ -1407,15 +1606,24 @@
         selectionSession = null;
         currentResult = null;
         lastQuery = null;
+        resetArticleHistory();
         removePanel();
         loadForQuery(googleQuery);
         return;
       }
 
-      const rootQuery = selectionSession?.rootQuery || "";
-      if (rootQuery) {
-        loadForSelection(rootQuery, { preserveRoot: true });
+      if (articleHistory.length && historyIndex !== 0) {
+        navigateToHistoryIndex(0);
+        return;
       }
+
+      const rootQuery = selectionSession?.rootQuery || "";
+      if (rootQuery) loadForSelection(rootQuery, { preserveRoot: true });
+      return;
+    }
+
+    if (articleHistory.length && historyIndex !== 0) {
+      navigateToHistoryIndex(0);
       return;
     }
 
@@ -1471,6 +1679,37 @@
     random.title = "Random Wikipedia article";
     random.setAttribute("aria-label", "Random Wikipedia article");
     random.addEventListener("click", () => loadRandomArticle(panel, body, activeLookupQuery(), random));
+
+    const historyControl = makeElement("div", "goowi-history-control");
+    const history = makeElement("button", "goowi-icon-button goowi-history-button", "◴");
+    history.type = "button";
+    history.title = "Article history";
+    history.setAttribute("aria-label", history.title);
+    history.setAttribute("aria-haspopup", "menu");
+    history.setAttribute("aria-expanded", "false");
+    const historyMenu = makeElement("div", "goowi-history-menu");
+    historyMenu.hidden = true;
+    historyMenu.setAttribute("role", "menu");
+    history.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (history.disabled) return;
+      const opening = historyMenu.hidden;
+      if (opening) {
+        renderHistoryMenu(panel);
+        historyMenu.hidden = false;
+      } else {
+        historyMenu.hidden = true;
+      }
+      history.setAttribute("aria-expanded", opening ? "true" : "false");
+    });
+    historyControl.append(history, historyMenu);
+
+    const back = makeElement("button", "goowi-icon-button goowi-back-button");
+    back.type = "button";
+    back.innerHTML = '<svg class="goowi-back-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 7L5 12L10 17M5 12H18"/></svg>';
+    back.title = "Previous article";
+    back.setAttribute("aria-label", back.title);
+    back.addEventListener("click", goBackArticle);
 
     const race = makeElement("button", "goowi-icon-button goowi-race-button", "⚑");
     race.type = "button";
@@ -1562,8 +1801,8 @@
       });
     }
 
-    controls.append(race, random, refresh, overlay, collapse);
-    toolbar.append(brandGroup, donate, controls);
+    controls.append(donate, race, random, historyControl, back, refresh, overlay, collapse);
+    toolbar.append(brandGroup, controls);
 
     const racebar = makeElement("div", "goowi-racebar");
     racebar.hidden = true;
@@ -1574,9 +1813,13 @@
     body.appendChild(loading);
 
     panel.append(toolbar, racebar, body);
+    panel.addEventListener("click", (event) => {
+      if (!historyControl.contains(event.target)) closeHistoryMenu(panel);
+    });
     document.body.appendChild(panel);
     document.documentElement.classList.add("goowi-visible");
     updateRaceUi(panel);
+    updateHistoryUi(panel);
 
     return { panel, body };
   }
@@ -1704,6 +1947,7 @@
     const query = cleanSelectionText(rawSelection);
     if (!query) return;
 
+    const lookupCandidates = normalizeSelectionCandidates(query, options.lookupCandidates);
     const googleQueryAtStart = isGoogleSearchPage() ? getQuery() : "";
     const existingSessionIsCurrent = Boolean(
       selectionSession?.active &&
@@ -1712,6 +1956,10 @@
     const rootQuery = options.preserveRoot && selectionSession?.rootQuery
       ? selectionSession.rootQuery
       : (existingSessionIsCurrent ? selectionSession.rootQuery : query);
+
+    const previousBody = document.getElementById(PANEL_ID)?.querySelector(".goowi-body");
+    if (existingSessionIsCurrent) saveCurrentHistoryScroll(previousBody);
+    else resetArticleHistory();
 
     selectionSession = {
       active: true,
@@ -1731,15 +1979,28 @@
     }
 
     try {
-      const result = await browser.runtime.sendMessage({
-        type: "goowi:lookup",
-        query,
-        language: getLanguage(),
-        googleContexts: [],
-        googleContext: null
-      });
+      let result = null;
+      let resolvedQuery = query;
 
-      if (serial !== requestSerial || !sourceQueryIsCurrent(query) || !panel.isConnected) return;
+      for (const candidate of lookupCandidates) {
+        if (selectionLength(candidate) > MAX_SELECTION_LENGTH) continue;
+
+        const candidateResult = await browser.runtime.sendMessage({
+          type: "goowi:lookup",
+          query: candidate,
+          language: getLanguage(),
+          googleContexts: [],
+          googleContext: null
+        });
+
+        if (serial !== requestSerial || !sourceQueryIsCurrent(query) || !panel.isConnected) return;
+
+        if (candidateResult?.found) {
+          result = candidateResult;
+          resolvedQuery = candidate;
+          break;
+        }
+      }
 
       if (!result?.found) {
         currentResult = null;
@@ -1748,7 +2009,14 @@
       }
 
       currentResult = result;
-      renderResult(body, result, query);
+      selectionSession.currentQuery = resolvedQuery;
+      if (!existingSessionIsCurrent && !options.preserveRoot) {
+        selectionSession.rootQuery = resolvedQuery;
+      }
+
+      if (existingSessionIsCurrent && articleHistory.length) pushArticleHistory(result, resolvedQuery);
+      else seedArticleHistory(result, resolvedQuery);
+      renderResult(body, result, resolvedQuery);
       updateRaceUi(panel);
       body.scrollTop = 0;
     } catch (error) {
@@ -1765,6 +2033,8 @@
   async function loadRandomArticle(panel, body, query, button) {
     if (!panel?.isConnected || !body || raceIsActive()) return;
 
+    saveCurrentHistoryScroll(body);
+    closeHistoryMenu(panel);
     const serial = ++requestSerial;
     const originalText = button.textContent;
     button.disabled = true;
@@ -1783,6 +2053,7 @@
 
       raceState = null;
       currentResult = result;
+      pushArticleHistory(result, query);
       renderResult(body, result, query);
       updateRaceUi(panel);
       body.scrollTop = 0;
@@ -1806,6 +2077,7 @@
       lastQuery = null;
       currentResult = null;
       raceState = null;
+      resetArticleHistory();
       return;
     }
 
@@ -1823,6 +2095,7 @@
     raceState = null;
     if (!force) {
       currentResult = null;
+      resetArticleHistory();
       removePanel();
     }
 
@@ -1852,12 +2125,19 @@
       currentResult = result;
 
       if (force && existingPanel?.isConnected && existingBody) {
+        if (articleHistory.length) {
+          historyIndex = 0;
+          replaceHistoryEntry(0, result, query);
+        } else {
+          seedArticleHistory(result, query);
+        }
         renderResult(existingBody, result, query);
         updateRaceUi(existingPanel);
         existingBody.scrollTop = 0;
         return;
       }
 
+      seedArticleHistory(result, query);
       const { panel, body } = makeShell(query);
       renderResult(body, result, query);
       updateRaceUi(panel);
@@ -1872,6 +2152,11 @@
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
     const panel = document.getElementById(PANEL_ID);
+    const historyMenu = panel?.querySelector(".goowi-history-menu");
+    if (historyMenu && !historyMenu.hidden) {
+      closeHistoryMenu(panel);
+      return;
+    }
     if (!panel?.classList.contains("goowi-expanded")) return;
 
     panel.classList.remove("goowi-expanded");
@@ -1908,21 +2193,21 @@
     }
   }
 
-  function receiveNativeSidebarSelection(rawSelection) {
+  function receiveNativeSidebarSelection(rawSelection, rawCandidates = []) {
     const query = cleanSelectionText(rawSelection);
     if (!query) return;
     if (selectionSession?.active && selectionSession.currentQuery === query) return;
-    loadForSelection(query);
+    loadForSelection(query, { lookupCandidates: rawCandidates });
   }
 
   browser.runtime.onMessage.addListener((message) => {
     if (message?.type === "goowi:view-selection") {
-      loadForSelection(message.selection);
+      loadForSelection(message.selection, { lookupCandidates: message.selectionCandidates });
       return undefined;
     }
 
     if (message?.type === "goowi:native-sidebar-selection" && isNativeSidebarSurface()) {
-      receiveNativeSidebarSelection(message.selection);
+      receiveNativeSidebarSelection(message.selection, message.selectionCandidates);
       return undefined;
     }
 
@@ -1932,7 +2217,7 @@
   if (isNativeSidebarSurface()) {
     browser.runtime.sendMessage({ type: "goowi:get-native-sidebar-selection" })
       .then((state) => {
-        if (state?.selection) receiveNativeSidebarSelection(state.selection);
+        if (state?.selection) receiveNativeSidebarSelection(state.selection, state.selectionCandidates);
       })
       .catch(() => {});
   }
